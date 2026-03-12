@@ -1,24 +1,48 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
-
-import { useColorScheme } from '@/hooks/use-color-scheme';
-
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
+import { Stack, router, useSegments } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { getDefaultProfile, initDatabase } from '../src/db/database';
+import { useAppStore } from '../src/store/useAppStore';
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  const [isReady, setIsReady] = useState(false);
+  const segments = useSegments();
+  const initializeAppData = useAppStore((state) => state.initializeAppData);
+
+  useEffect(() => {
+    async function prepareApp() {
+      try {
+        await initDatabase();
+
+        const profile = await getDefaultProfile();
+        const inSetup = segments[0] === 'setup';
+
+        if (!profile && !inSetup) {
+          router.replace('/setup');
+        }
+
+        if (profile && inSetup) {
+          router.replace('/(tabs)');
+        }
+
+        await initializeAppData();
+      } catch (error) {
+        console.error('Failed to initialize app:', error);
+      } finally {
+        setIsReady(true);
+      }
+    }
+
+    prepareApp();
+  }, [segments, initializeAppData]);
+
+  if (!isReady) {
+    return null;
+  }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <Stack>
+      <Stack.Screen name="setup" options={{ headerShown: false }} />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+    </Stack>
   );
 }
