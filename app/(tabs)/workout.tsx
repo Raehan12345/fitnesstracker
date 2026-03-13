@@ -264,7 +264,7 @@ export default function WorkoutScreen() {
     setModalVisible(false);
   }
 
-  function handleDelete(sessionId: number) {
+function handleDelete(sessionId: number) {
     if (Platform.OS === 'web') {
       const confirmed = window.confirm('Are you sure you want to delete this workout session?');
       if (confirmed) {
@@ -294,7 +294,7 @@ export default function WorkoutScreen() {
       ]
     );
   }
-
+  
   function renderWorkout({ item }: { item: WorkoutSession }) {
     return (
       <View style={styles.entryCard}>

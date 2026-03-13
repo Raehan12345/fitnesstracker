@@ -175,7 +175,18 @@ export default function ProgressScreen() {
     setModalVisible(false);
   }
 
-  function handleDelete(metricId: number) {
+function handleDelete(metricId: number) {
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm('Are you sure you want to delete this weight entry?');
+      if (confirmed) {
+        deleteBodyMetricAndRefresh(metricId).catch((error) => {
+          console.error('Failed to delete weight entry:', error);
+          window.alert('Could not delete weight entry.');
+        });
+      }
+      return;
+    }
+
     Alert.alert(
       'Delete weight entry',
       'Are you sure you want to delete this weight entry?',
@@ -194,7 +205,7 @@ export default function ProgressScreen() {
       ]
     );
   }
-
+  
   const metricsCount = useMemo(() => bodyMetrics.length, [bodyMetrics]);
 
   function renderWeightItem({ item }: { item: (typeof bodyMetrics)[number] }) {
