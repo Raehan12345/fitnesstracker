@@ -167,7 +167,19 @@ export default function ProgressScreen() {
     setModalVisible(false);
   }
 
+  // replacing standard alert with platform specific logic for web
   function handleDelete(metricId: number) {
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm('Are you sure you want to delete this weight entry?');
+      if (confirmed) {
+        deleteBodyMetricAndRefresh(metricId).catch((error) => {
+          console.error('Failed to delete weight entry:', error);
+          window.alert('Could not delete weight entry.');
+        });
+      }
+      return;
+    }
+
     Alert.alert(
       'Delete weight entry',
       'Are you sure you want to delete this weight entry?',

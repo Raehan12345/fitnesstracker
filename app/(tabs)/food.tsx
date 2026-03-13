@@ -100,7 +100,18 @@ export default function FoodScreen() {
     setModalVisible(false);
   }
 
-  function handleDelete(entryId: number) {
+function handleDelete(entryId: number) {
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm('Are you sure you want to delete this entry?');
+      if (confirmed) {
+        deleteFoodAndRefresh(entryId).catch((error) => {
+          console.error('Failed to delete food entry:', error);
+          window.alert('Could not delete food entry.');
+        });
+      }
+      return;
+    }
+
     Alert.alert(
       'Delete food entry',
       'Are you sure you want to delete this entry?',

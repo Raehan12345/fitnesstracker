@@ -19,6 +19,7 @@ function MacroRing({
   const strokeWidth = 10;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
+  // calculating progress against target
   const progress = target > 0 ? Math.min(value / target, 1) : 0;
   const dashOffset = circumference * (1 - progress);
 
@@ -58,6 +59,28 @@ function MacroRing({
   );
 }
 
+// standalone calorie bar component
+function CalorieBar({ current, target }: { current: number; target: number }) {
+  const progress = target > 0 ? Math.min(current / target, 1) : 0;
+  const barHeight = 20;
+
+  return (
+    <View style={styles.calorieBarContainer}>
+      <Text style={styles.calorieBarText}>
+        Calories: {current.toFixed(0)} / {target.toFixed(0)} kcal
+      </Text>
+      <View style={[styles.barBackground, { height: barHeight }]}>
+        <View
+          style={[
+            styles.barFill,
+            { height: barHeight, width: `${progress * 100}%` },
+          ]}
+        />
+      </View>
+    </View>
+  );
+}
+
 export default function HomeScreen() {
   const profile = useAppStore((state) => state.profile);
   const latestWeight = useAppStore((state) => state.latestWeight);
@@ -73,16 +96,22 @@ export default function HomeScreen() {
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Profile</Text>
-        <Text style={styles.cardText}>Age: {profile?.age ?? '--'}</Text>
-        <Text style={styles.cardText}>Height: {profile?.height_cm ?? '--'} cm</Text>
-        <Text style={styles.cardText}>Sex: {profile?.sex ?? '--'}</Text>
+        <Text style={styles.cardText}>Age: {profile?.age ?? 'not set'}</Text>
+        <Text style={styles.cardText}>Height: {profile?.height_cm ?? 'not set'} cm</Text>
+        <Text style={styles.cardText}>Sex: {profile?.sex ?? 'not set'}</Text>
         <Text style={styles.cardText}>
-          Current Weight: {latestWeight !== null ? `${latestWeight.toFixed(1)} kg` : '--'}
+          Current Weight: {latestWeight !== null ? `${latestWeight.toFixed(1)} kg` : 'not set'}
         </Text>
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Macro Rings</Text>
+        <Text style={styles.cardTitle}>Daily Progress</Text>
+        
+        <CalorieBar 
+          current={foodSummary.totalCalories} 
+          target={profile?.calorie_target ?? 0} 
+        />
+
         <View style={styles.ringsRow}>
           <MacroRing
             label="Protein"
@@ -103,15 +132,6 @@ export default function HomeScreen() {
             color="#f59e0b"
           />
         </View>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Today&apos;s Nutrition</Text>
-        <Text style={styles.cardText}>Calories: {foodSummary.totalCalories.toFixed(0)} kcal</Text>
-        <Text style={styles.cardText}>Protein: {foodSummary.totalProtein.toFixed(1)} g</Text>
-        <Text style={styles.cardText}>Carbs: {foodSummary.totalCarbs.toFixed(1)} g</Text>
-        <Text style={styles.cardText}>Fats: {foodSummary.totalFats.toFixed(1)} g</Text>
-        <Text style={styles.cardSubtext}>Entries logged: {foodSummary.entryCount}</Text>
       </View>
 
       <View style={styles.card}>
@@ -246,5 +266,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#374151',
+  },
+  calorieBarContainer: {
+    marginBottom: 20,
+  },
+  calorieBarText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  barBackground: {
+    backgroundColor: '#e5e7eb',
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  barFill: {
+    backgroundColor: '#3b82f6',
+    borderRadius: 10,
   },
 });
