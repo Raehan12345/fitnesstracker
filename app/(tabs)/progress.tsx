@@ -255,7 +255,7 @@ export default function ProgressScreen() {
                     placeholderTextColor="#6b7280"
                     value={bodyWeight}
                     onChangeText={setBodyWeight}
-                    keyboardType="numeric"
+                    keyboardType="decimal-pad"
                     style={styles.input}
                   />
 

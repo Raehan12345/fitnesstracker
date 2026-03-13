@@ -143,7 +143,7 @@ export default function SetupScreen() {
           placeholderTextColor="#6b7280"
           value={heightCm}
           onChangeText={setHeightCm}
-          keyboardType="numeric"
+          keyboardType="decimal-pad"
           style={styles.input}
         />
 
@@ -152,7 +152,7 @@ export default function SetupScreen() {
           placeholderTextColor="#6b7280"
           value={startingWeightKg}
           onChangeText={setStartingWeightKg}
-          keyboardType="numeric"
+          keyboardType="decimal-pad"
           style={styles.input}
         />
 

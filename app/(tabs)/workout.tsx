@@ -214,7 +214,7 @@ function handleDelete(sessionId: number) {
       ]
     );
   }
-  
+
   function renderWorkout({ item }: { item: WorkoutSession }) {
     return (
       <View style={styles.entryCard}>
@@ -346,7 +346,7 @@ function handleDelete(sessionId: number) {
                         placeholderTextColor="#6b7280"
                         value={durationMinutes}
                         onChangeText={setDurationMinutes}
-                        keyboardType="numeric"
+                        keyboardType="decimal-pad"
                         style={styles.input}
                       />
 
@@ -379,7 +379,7 @@ function handleDelete(sessionId: number) {
                             placeholderTextColor="#6b7280"
                             value={weightKg}
                             onChangeText={setWeightKg}
-                            keyboardType="numeric"
+                            keyboardType="decimal-pad"
                             style={styles.input}
                           />
 
@@ -400,7 +400,7 @@ function handleDelete(sessionId: number) {
                           placeholderTextColor="#6b7280"
                           value={distanceKm}
                           onChangeText={setDistanceKm}
-                          keyboardType="numeric"
+                          keyboardType="decimal-pad"
                           style={styles.input}
                         />
                       ) : null}

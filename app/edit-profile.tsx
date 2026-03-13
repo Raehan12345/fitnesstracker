@@ -139,7 +139,7 @@ export default function EditProfileScreen() {
           style={styles.input}
           placeholder="Height (cm)"
           placeholderTextColor={'#d1d5db'}
-          keyboardType="numeric"
+          keyboardType="decimal-pad"
           value={height}
           onChangeText={setHeight}
         />
@@ -148,7 +148,7 @@ export default function EditProfileScreen() {
           style={styles.input}
           placeholder="Weight (kg)"
           placeholderTextColor={'#d1d5db'}
-          keyboardType="numeric"
+          keyboardType="decimal-pad"
           value={weight}
           onChangeText={setWeight}
         />

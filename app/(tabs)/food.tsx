@@ -100,7 +100,7 @@ export default function FoodScreen() {
     setModalVisible(false);
   }
 
-function handleDelete(entryId: number) {
+  function handleDelete(entryId: number) {
     if (Platform.OS === 'web') {
       const confirmed = window.confirm('Are you sure you want to delete this entry?');
       if (confirmed) {
@@ -216,12 +216,13 @@ function handleDelete(entryId: number) {
                     </Picker>
                   </View>
 
+                  {/* changing numeric to decimal-pad to support floats */}
                   <TextInput
                     placeholder="Calories"
                     placeholderTextColor="#6b7280"
                     value={calories}
                     onChangeText={setCalories}
-                    keyboardType="numeric"
+                    keyboardType="decimal-pad"
                     style={styles.input}
                   />
 
@@ -230,7 +231,7 @@ function handleDelete(entryId: number) {
                     placeholderTextColor="#6b7280"
                     value={protein}
                     onChangeText={setProtein}
-                    keyboardType="numeric"
+                    keyboardType="decimal-pad"
                     style={styles.input}
                   />
 
@@ -239,7 +240,7 @@ function handleDelete(entryId: number) {
                     placeholderTextColor="#6b7280"
                     value={carbs}
                     onChangeText={setCarbs}
-                    keyboardType="numeric"
+                    keyboardType="decimal-pad"
                     style={styles.input}
                   />
 
@@ -248,7 +249,7 @@ function handleDelete(entryId: number) {
                     placeholderTextColor="#6b7280"
                     value={fats}
                     onChangeText={setFats}
-                    keyboardType="numeric"
+                    keyboardType="decimal-pad"
                     style={styles.input}
                   />
 
