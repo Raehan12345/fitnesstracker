@@ -251,7 +251,7 @@ export default function SetupScreen() {
           placeholderTextColor={theme.textMuted}
           value={calorieTarget}
           onChangeText={setCalorieTarget}
-          keyboardType="numeric"
+          keyboardType="decimal-pad"
           style={styles.input}
         />
 
@@ -260,7 +260,7 @@ export default function SetupScreen() {
           placeholderTextColor={theme.textMuted}
           value={proteinTarget}
           onChangeText={setProteinTarget}
-          keyboardType="numeric"
+          keyboardType="decimal-pad"
           style={styles.input}
         />
 
@@ -269,7 +269,7 @@ export default function SetupScreen() {
           placeholderTextColor={theme.textMuted}
           value={carbsTarget}
           onChangeText={setCarbsTarget}
-          keyboardType="numeric"
+          keyboardType="decimal-pad"
           style={styles.input}
         />
 
@@ -278,7 +278,7 @@ export default function SetupScreen() {
           placeholderTextColor={theme.textMuted}
           value={fatTarget}
           onChangeText={setFatTarget}
-          keyboardType="numeric"
+          keyboardType="decimal-pad"
           style={styles.input}
         />
 

@@ -207,7 +207,7 @@ export default function EditProfileScreen() {
           style={styles.input}
           placeholder="Calories"
           placeholderTextColor={theme.textMuted}
-          keyboardType="numeric"
+          keyboardType="decimal-pad"
           value={calories}
           onChangeText={setCalories}
         />
@@ -216,7 +216,7 @@ export default function EditProfileScreen() {
           style={styles.input}
           placeholder="Protein (g)"
           placeholderTextColor={theme.textMuted}
-          keyboardType="numeric"
+          keyboardType="decimal-pad"
           value={protein}
           onChangeText={setProtein}
         />
@@ -225,7 +225,7 @@ export default function EditProfileScreen() {
           style={styles.input}
           placeholder="Carbs (g)"
           placeholderTextColor={theme.textMuted}
-          keyboardType="numeric"
+          keyboardType="decimal-pad"
           value={carbs}
           onChangeText={setCarbs}
         />
@@ -234,7 +234,7 @@ export default function EditProfileScreen() {
           style={styles.input}
           placeholder="Fat (g)"
           placeholderTextColor={theme.textMuted}
-          keyboardType="numeric"
+          keyboardType="decimal-pad"
           value={fat}
           onChangeText={setFat}
         />

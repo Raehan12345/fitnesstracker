@@ -220,7 +220,7 @@ export default function FoodScreen() {
                     placeholderTextColor={theme.textMuted}
                     value={calories}
                     onChangeText={setCalories}
-                    keyboardType="numeric"
+                    keyboardType="decimal-pad"
                     style={styles.input}
                   />
 
@@ -229,7 +229,7 @@ export default function FoodScreen() {
                     placeholderTextColor={theme.textMuted}
                     value={protein}
                     onChangeText={setProtein}
-                    keyboardType="numeric"
+                    keyboardType="decimal-pad"
                     style={styles.input}
                   />
 
@@ -238,7 +238,7 @@ export default function FoodScreen() {
                     placeholderTextColor={theme.textMuted}
                     value={carbs}
                     onChangeText={setCarbs}
-                    keyboardType="numeric"
+                    keyboardType="decimal-pad"
                     style={styles.input}
                   />
 
@@ -247,7 +247,7 @@ export default function FoodScreen() {
                     placeholderTextColor={theme.textMuted}
                     value={fats}
                     onChangeText={setFats}
-                    keyboardType="numeric"
+                    keyboardType="decimal-pad"
                     style={styles.input}
                   />
 
