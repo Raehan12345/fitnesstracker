@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { useMemo } from 'react';
 import {
   Alert,
   Platform,
@@ -7,12 +8,18 @@ import {
   StyleSheet,
   Text,
   View,
+  useColorScheme,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAppStore } from '../../src/store/useAppStore';
+import { Colors } from '../../constants/theme';
 import { exportBackupData, importBackupData } from '../../src/db/database';
+import { useAppStore } from '../../src/store/useAppStore';
 
 export default function SettingsScreen() {
+  const colorScheme = useColorScheme() ?? 'light';
+  const theme = Colors[colorScheme];
+  const styles = useMemo(() => getStyles(theme), [theme]);
+
   const profile = useAppStore((state) => state.profile);
   const resetAppData = useAppStore((state) => state.resetAppData);
 
@@ -120,12 +127,12 @@ export default function SettingsScreen() {
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Profile</Text>
 
-          <Text style={styles.item}>Name: {profile?.name ?? '--'}</Text>
-          <Text style={styles.item}>Age: {profile?.age ?? '--'}</Text>
-          <Text style={styles.item}>Sex: {profile?.sex ?? '--'}</Text>
-          <Text style={styles.item}>Height: {profile?.height_cm ?? '--'} cm</Text>
+          <Text style={styles.item}>Name: {profile?.name ?? 'N/A'}</Text>
+          <Text style={styles.item}>Age: {profile?.age ?? 'N/A'}</Text>
+          <Text style={styles.item}>Sex: {profile?.sex ?? 'N/A'}</Text>
+          <Text style={styles.item}>Height: {profile?.height_cm ?? 'N/A'} cm</Text>
           <Text style={styles.item}>
-            Starting Weight: {profile?.starting_weight_kg ?? '--'} kg
+            Starting Weight: {profile?.starting_weight_kg ?? 'N/A'} kg
           </Text>
 
           <Pressable
@@ -140,19 +147,19 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>Nutrition Targets</Text>
 
           <Text style={styles.item}>
-            Calories: {profile?.calorie_target ?? '--'} kcal
+            Calories: {profile?.calorie_target ?? 'N/A'} kcal
           </Text>
 
           <Text style={styles.item}>
-            Protein: {profile?.protein_target ?? '--'} g
+            Protein: {profile?.protein_target ?? 'N/A'} g
           </Text>
 
           <Text style={styles.item}>
-            Carbs: {profile?.carbs_target ?? '--'} g
+            Carbs: {profile?.carbs_target ?? 'N/A'} g
           </Text>
 
           <Text style={styles.item}>
-            Fats: {profile?.fat_target ?? '--'} g
+            Fats: {profile?.fat_target ?? 'N/A'} g
           </Text>
         </View>
 
@@ -167,7 +174,7 @@ export default function SettingsScreen() {
             style={[styles.primaryButton, styles.importButton]}
             onPress={() => void handleImport()}
           >
-            <Text style={styles.primaryButtonText}>Import Backup</Text>
+            <Text style={styles.importButtonText}>Import Backup</Text>
           </Pressable>
         </View>
 
@@ -183,73 +190,77 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: typeof Colors.light) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.background,
   },
-
   content: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingHorizontal: 24,
+    paddingTop: 32,
     paddingBottom: 120,
   },
-
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginBottom: 20,
-    color: '#111827',
+    fontSize: 36,
+    fontWeight: '800',
+    letterSpacing: -1,
+    marginBottom: 24,
+    color: theme.text,
   },
-
   card: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    backgroundColor: theme.surface,
+    borderRadius: 32,
+    padding: 24,
+    marginBottom: 20,
   },
-
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 10,
-    color: '#111827',
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    marginBottom: 16,
+    color: theme.text,
   },
-
   item: {
-    fontSize: 15,
-    marginBottom: 6,
-    color: '#111827',
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 8,
+    color: theme.text,
   },
-
   primaryButton: {
-    backgroundColor: '#2563eb',
-    paddingVertical: 12,
-    borderRadius: 10,
-    marginTop: 10,
+    backgroundColor: theme.text,
+    paddingVertical: 16,
+    borderRadius: 100,
+    marginTop: 16,
     alignItems: 'center',
   },
-
-  importButton: {
-    marginTop: 10,
-  },
-
   primaryButtonText: {
-    color: '#fff',
+    color: theme.background,
     fontWeight: '700',
+    fontSize: 16,
   },
-
+  importButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: theme.border,
+    marginTop: 12,
+  },
+  importButtonText: {
+    color: theme.text,
+    fontWeight: '700',
+    fontSize: 16,
+  },
   dangerButton: {
-    backgroundColor: '#dc2626',
-    paddingVertical: 12,
-    borderRadius: 10,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: theme.danger,
+    paddingVertical: 16,
+    borderRadius: 100,
+    marginTop: 16,
     alignItems: 'center',
   },
-
   dangerButtonText: {
-    color: '#fff',
+    color: theme.danger,
     fontWeight: '700',
+    fontSize: 16,
   },
 });

@@ -12,7 +12,9 @@ import {
   TextInput,
   TouchableWithoutFeedback,
   View,
+  useColorScheme,
 } from 'react-native';
+import { Colors } from '../../constants/theme';
 import { RunPbSummary, StrengthPb } from '../../src/db/database';
 import { useAppStore } from '../../src/store/useAppStore';
 
@@ -36,6 +38,7 @@ type HeaderProps = {
   strengthPbs: StrengthPb[];
   runPbs: RunPbSummary;
   onAddWeight: () => void;
+  styles: any;
 };
 
 function ProgressHeader({
@@ -45,6 +48,7 @@ function ProgressHeader({
   strengthPbs,
   runPbs,
   onAddWeight,
+  styles,
 }: HeaderProps) {
   return (
     <View>
@@ -124,6 +128,10 @@ function ProgressHeader({
 }
 
 export default function ProgressScreen() {
+  const colorScheme = useColorScheme() ?? 'light';
+  const theme = Colors[colorScheme];
+  const styles = useMemo(() => getStyles(theme), [theme]);
+
   const profile = useAppStore((state) => state.profile);
   const latestWeight = useAppStore((state) => state.latestWeight);
   const bodyMetrics = useAppStore((state) => state.bodyMetrics);
@@ -167,19 +175,7 @@ export default function ProgressScreen() {
     setModalVisible(false);
   }
 
-  // replacing standard alert with platform specific logic for web
   function handleDelete(metricId: number) {
-    if (Platform.OS === 'web') {
-      const confirmed = window.confirm('Are you sure you want to delete this weight entry?');
-      if (confirmed) {
-        deleteBodyMetricAndRefresh(metricId).catch((error) => {
-          console.error('Failed to delete weight entry:', error);
-          window.alert('Could not delete weight entry.');
-        });
-      }
-      return;
-    }
-
     Alert.alert(
       'Delete weight entry',
       'Are you sure you want to delete this weight entry?',
@@ -235,6 +231,7 @@ export default function ProgressScreen() {
               strengthPbs={strengthPbs}
               runPbs={runPbs}
               onAddWeight={() => setModalVisible(true)}
+              styles={styles}
             />
           }
           ListEmptyComponent={<Text style={styles.emptyText}>No body weight entries yet.</Text>}
@@ -252,7 +249,7 @@ export default function ProgressScreen() {
 
                   <TextInput
                     placeholder="Body weight (kg)"
-                    placeholderTextColor="#6b7280"
+                    placeholderTextColor={theme.textMuted}
                     value={bodyWeight}
                     onChangeText={setBodyWeight}
                     keyboardType="decimal-pad"
@@ -261,7 +258,7 @@ export default function ProgressScreen() {
 
                   <TextInput
                     placeholder="Date (YYYY-MM-DD)"
-                    placeholderTextColor="#6b7280"
+                    placeholderTextColor={theme.textMuted}
                     value={entryDate}
                     onChangeText={setEntryDate}
                     style={styles.input}
@@ -276,7 +273,7 @@ export default function ProgressScreen() {
                         setModalVisible(false);
                       }}
                     >
-                      <Text style={styles.actionButtonText}>Cancel</Text>
+                      <Text style={styles.cancelButtonText}>Cancel</Text>
                     </Pressable>
 
                     <Pressable
@@ -288,7 +285,7 @@ export default function ProgressScreen() {
                         });
                       }}
                     >
-                      <Text style={styles.actionButtonText}>Save</Text>
+                      <Text style={styles.saveButtonText}>Save</Text>
                     </Pressable>
                   </View>
                 </KeyboardAvoidingView>
@@ -301,170 +298,212 @@ export default function ProgressScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: typeof Colors.light) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.background,
   },
   listContent: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 32,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 40,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
+    fontSize: 36,
+    fontWeight: '800',
+    letterSpacing: -1,
     marginBottom: 4,
-    color: '#111827',
+    color: theme.text,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#4b5563',
-    marginBottom: 16,
+    fontSize: 16,
+    color: theme.textMuted,
+    marginBottom: 24,
+    fontWeight: '500',
   },
   summaryCard: {
-    backgroundColor: '#f3f4f6',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 16,
+    backgroundColor: theme.surface,
+    borderRadius: 24,
+    padding: 24,
+    marginBottom: 20,
   },
   summaryTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 8,
-    color: '#111827',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 12,
+    color: theme.textMuted,
   },
   summaryText: {
-    fontSize: 15,
-    marginBottom: 4,
-    color: '#111827',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+    color: theme.text,
   },
   addButton: {
-    backgroundColor: '#2563eb',
-    paddingVertical: 14,
-    borderRadius: 12,
+    backgroundColor: theme.text,
+    paddingVertical: 16,
+    borderRadius: 100,
     alignItems: 'center',
-    marginBottom: 18,
+    marginBottom: 32,
+    shadowColor: theme.text,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
   },
   addButtonText: {
-    color: '#fff',
+    color: theme.background,
     fontSize: 16,
     fontWeight: '700',
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 12,
-    marginTop: 6,
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    color: theme.text,
+    marginBottom: 16,
+    marginTop: 8,
   },
   emptyText: {
-    color: '#4b5563',
-    marginBottom: 16,
+    color: theme.textMuted,
+    marginBottom: 24,
+    fontSize: 15,
+    fontWeight: '500',
   },
   entryCard: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
+    backgroundColor: theme.background,
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: theme.surface,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   entryTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    color: theme.text,
     marginBottom: 6,
   },
   entryDate: {
     fontSize: 14,
-    color: '#4b5563',
+    color: theme.textMuted,
+    fontWeight: '500',
   },
   pbCard: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
+    backgroundColor: theme.background,
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: theme.surface,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   pbTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#111827',
+    fontSize: 16,
+    fontWeight: '800',
+    color: theme.text,
     marginBottom: 6,
   },
   pbValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#2563eb',
-    marginBottom: 4,
+    fontSize: 20,
+    fontWeight: '800',
+    color: theme.text,
+    marginBottom: 6,
   },
   pbDate: {
     fontSize: 13,
-    color: '#6b7280',
+    color: theme.textMuted,
+    fontWeight: '500',
   },
   deleteButton: {
-    marginTop: 10,
+    marginTop: 16,
     alignSelf: 'flex-start',
-    backgroundColor: '#dc2626',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: theme.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 100,
   },
   deleteButtonText: {
-    color: '#fff',
+    color: theme.danger,
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 14,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
   },
   modalCard: {
-    backgroundColor: '#fff',
-    padding: 20,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: theme.background,
+    padding: 24,
+    paddingTop: 32,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    maxHeight: '90%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 16,
-    color: '#111827',
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    marginBottom: 24,
+    color: theme.text,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    marginBottom: 12,
-    fontSize: 15,
-    color: '#111827',
-    backgroundColor: '#fff',
+    borderWidth: 0,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginBottom: 16,
+    fontSize: 16,
+    color: theme.text,
+    backgroundColor: theme.surface,
+    fontWeight: '500',
   },
   modalActions: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 4,
+    gap: 16,
+    marginTop: 8,
+    marginBottom: 16,
   },
   actionButton: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 10,
+    paddingVertical: 16,
+    borderRadius: 100,
     alignItems: 'center',
   },
   cancelButton: {
-    backgroundColor: '#9ca3af',
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: theme.border,
+  },
+  cancelButtonText: {
+    color: theme.text,
+    fontWeight: '700',
+    fontSize: 16,
   },
   saveButton: {
-    backgroundColor: '#2563eb',
+    backgroundColor: theme.text,
   },
-  actionButtonText: {
-    color: '#fff',
+  saveButtonText: {
+    color: theme.background,
     fontWeight: '700',
-    fontSize: 15,
+    fontSize: 16,
   },
 });

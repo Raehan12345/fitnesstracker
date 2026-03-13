@@ -1,5 +1,5 @@
 import { Picker } from '@react-native-picker/picker';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -14,27 +14,64 @@ import {
   TextInput,
   TouchableWithoutFeedback,
   View,
+  useColorScheme,
 } from 'react-native';
+import { Colors } from '../../constants/theme';
 import { WorkoutSession } from '../../src/db/database';
 import { useAppStore } from '../../src/store/useAppStore';
 
 const today = new Date().toISOString().split('T')[0];
 
+// helper function to format seconds into hh:mm:ss or mm:ss
+function formatTimerDisplay(totalSeconds: number) {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  }
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
+
 function getMetValue(workoutType: string, intensity: string) {
   const metMap: Record<string, Record<string, number>> = {
-    Walking: { Light: 2.5, Moderate: 3.5, Hard: 4.5 },
-    Running: { Light: 6, Moderate: 8, Hard: 10 },
-    Cycling: { Light: 4, Moderate: 6, Hard: 8 },
-    'Strength Training': { Light: 3.5, Moderate: 5, Hard: 6 },
-    HIIT: { Light: 6, Moderate: 8, Hard: 10 },
-    Sports: { Light: 4, Moderate: 6, Hard: 8 },
-    Other: { Light: 3, Moderate: 5, Hard: 7 },
+    Walking: { 'Stroll (< 4 km/h)': 2.5, 'Brisk (4-5.5 km/h)': 3.5, 'Power Walk (> 5.5 km/h)': 4.5 },
+    Running: { 'Jog (> 6:00/km)': 7.0, 'Paced (5:00-6:00/km)': 9.0, 'Fast (< 5:00/km)': 11.0 },
+    Cycling: { 'Casual (< 16 km/h)': 4.0, 'Moderate (16-20 km/h)': 6.0, 'Vigorous (> 20 km/h)': 8.0 },
+    'Strength Training': { 'Powerlifting (Long Rests)': 3.5, 'Hypertrophy (Standard)': 5.0, 'Circuit (Short Rests)': 6.5 },
+    HIIT: { 'Work:Rest 1:2': 6.0, 'Work:Rest 1:1': 8.0, 'Work:Rest 2:1 (Tabata)': 10.0 },
+    Sports: { 'Recreational (Lots of stops)': 5.0, 'Competitive (Continuous)': 8.0 },
+    Other: { 'Low Exertion': 3.0, 'Moderate Exertion': 5.0, 'High Exertion': 7.0 },
   };
 
   return metMap[workoutType]?.[intensity] ?? 0;
 }
 
+function getIntensityOptions(workoutType: string) {
+  switch (workoutType) {
+    case 'Walking':
+      return ['Stroll (< 4 km/h)', 'Brisk (4-5.5 km/h)', 'Power Walk (> 5.5 km/h)'];
+    case 'Running':
+      return ['Jog (> 6:00/km)', 'Paced (5:00-6:00/km)', 'Fast (< 5:00/km)'];
+    case 'Cycling':
+      return ['Casual (< 16 km/h)', 'Moderate (16-20 km/h)', 'Vigorous (> 20 km/h)'];
+    case 'Strength Training':
+      return ['Powerlifting (Long Rests)', 'Hypertrophy (Standard)', 'Circuit (Short Rests)'];
+    case 'HIIT':
+      return ['Work:Rest 1:2', 'Work:Rest 1:1', 'Work:Rest 2:1 (Tabata)'];
+    case 'Sports':
+      return ['Recreational (Lots of stops)', 'Competitive (Continuous)'];
+    default:
+      return ['Low Exertion', 'Moderate Exertion', 'High Exertion'];
+  }
+}
+
 export default function WorkoutScreen() {
+  const colorScheme = useColorScheme() ?? 'light';
+  const theme = Colors[colorScheme];
+  const styles = useMemo(() => getStyles(theme), [theme]);
+
   const profile = useAppStore((state) => state.profile);
   const latestWeight = useAppStore((state) => state.latestWeight);
   const sessions = useAppStore((state) => state.workoutSessionsToday);
@@ -54,6 +91,49 @@ export default function WorkoutScreen() {
   const [reps, setReps] = useState('');
 
   const [distanceKm, setDistanceKm] = useState('');
+
+  // timer state variables
+  const [timerSeconds, setTimerSeconds] = useState(0);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+  // dynamically inferring the correct return type of setinterval
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // timer control functions
+  function startTimer() {
+    setIsTimerRunning(true);
+  }
+
+  function pauseTimer() {
+    setIsTimerRunning(false);
+  }
+
+  function resetTimer() {
+    setIsTimerRunning(false);
+    setTimerSeconds(0);
+  }
+
+  function endTimer() {
+    setIsTimerRunning(false);
+    const totalMinutes = (timerSeconds / 60).toFixed(2);
+    
+    // auto populate the duration and open modal
+    setDurationMinutes(String(totalMinutes));
+    setTimerSeconds(0);
+    setModalVisible(true);
+  }
+
+  useEffect(() => {
+    if (isTimerRunning) {
+      timerRef.current = setInterval(() => {
+        setTimerSeconds((prev) => prev + 1);
+      }, 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [isTimerRunning]);
 
   function resetForm() {
     setWorkoutName('');
@@ -184,7 +264,7 @@ export default function WorkoutScreen() {
     setModalVisible(false);
   }
 
-function handleDelete(sessionId: number) {
+  function handleDelete(sessionId: number) {
     if (Platform.OS === 'web') {
       const confirmed = window.confirm('Are you sure you want to delete this workout session?');
       if (confirmed) {
@@ -264,23 +344,6 @@ function handleDelete(sessionId: number) {
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <View style={styles.container}>
-        <Text style={styles.title}>Workout</Text>
-        <Text style={styles.subtitle}>
-          {profile ? `${profile.name}'s workouts for ${today}` : today}
-        </Text>
-
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>Today&apos;s Summary</Text>
-          <Text style={styles.summaryText}>Workout sessions: {sessions.length}</Text>
-          <Text style={styles.summaryText}>
-            Latest body weight: {latestWeight !== null ? `${latestWeight.toFixed(1)} kg` : '--'}
-          </Text>
-        </View>
-
-        <Pressable style={styles.addButton} onPress={() => setModalVisible(true)}>
-          <Text style={styles.addButtonText}>+ Add Workout</Text>
-        </Pressable>
-
         <FlatList
           data={sessions}
           keyExtractor={(item) => item.id.toString()}
@@ -291,6 +354,63 @@ function handleDelete(sessionId: number) {
           maxToRenderPerBatch={10}
           windowSize={5}
           removeClippedSubviews
+          ListHeaderComponent={
+            <>
+              <Text style={styles.title}>Workout</Text>
+              <Text style={styles.subtitle}>
+                {profile ? `${profile.name}'s workouts for ${today}` : today}
+              </Text>
+
+              <View style={styles.summaryCard}>
+                <Text style={styles.summaryTitle}>Today&apos;s Summary</Text>
+                <Text style={styles.summaryText}>Workout sessions: {sessions.length}</Text>
+                <Text style={styles.summaryText}>
+                  Latest body weight: {latestWeight !== null ? `${latestWeight.toFixed(1)} kg` : 'N/A'}
+                </Text>
+              </View>
+
+              <View style={styles.timerCard}>
+                <Text style={styles.timerDisplay}>{formatTimerDisplay(timerSeconds)}</Text>
+                
+                <View style={styles.timerControls}>
+                  {!isTimerRunning && timerSeconds === 0 && (
+                    <Pressable style={[styles.timerButton, styles.startButton]} onPress={startTimer}>
+                      <Text style={styles.timerButtonTextPrimary}>Start Timer</Text>
+                    </Pressable>
+                  )}
+
+                  {isTimerRunning && (
+                    <>
+                      <Pressable style={[styles.timerButton, styles.pauseButton]} onPress={pauseTimer}>
+                        <Text style={styles.timerButtonTextSecondary}>Pause</Text>
+                      </Pressable>
+                      <Pressable style={[styles.timerButton, styles.endButton]} onPress={endTimer}>
+                        <Text style={styles.timerButtonTextDanger}>End Workout</Text>
+                      </Pressable>
+                    </>
+                  )}
+
+                  {!isTimerRunning && timerSeconds > 0 && (
+                    <>
+                      <Pressable style={[styles.timerButton, styles.resumeButton]} onPress={startTimer}>
+                        <Text style={styles.timerButtonTextPrimary}>Resume</Text>
+                      </Pressable>
+                      <Pressable style={[styles.timerButton, styles.endButton]} onPress={endTimer}>
+                        <Text style={styles.timerButtonTextDanger}>End Workout</Text>
+                      </Pressable>
+                      <Pressable style={[styles.timerButton, styles.resetButton]} onPress={resetTimer}>
+                        <Text style={styles.timerButtonTextSecondary}>Reset</Text>
+                      </Pressable>
+                    </>
+                  )}
+                </View>
+              </View>
+
+              <Pressable style={styles.addButton} onPress={() => setModalVisible(true)}>
+                <Text style={styles.addButtonText}>+ Add Workout Manually</Text>
+              </Pressable>
+            </>
+          }
           ListEmptyComponent={
             <Text style={styles.emptyText}>No workouts logged for today yet.</Text>
           }
@@ -313,7 +433,7 @@ function handleDelete(sessionId: number) {
 
                       <TextInput
                         placeholder="Workout name"
-                        placeholderTextColor="#6b7280"
+                        placeholderTextColor={theme.textMuted}
                         value={workoutName}
                         onChangeText={setWorkoutName}
                         style={styles.input}
@@ -322,53 +442,55 @@ function handleDelete(sessionId: number) {
                       <View style={styles.pickerContainer}>
                         <Picker
                           selectedValue={workoutType}
-                          onValueChange={(itemValue) => setWorkoutType(itemValue)}
+                          onValueChange={(itemValue) => {
+                            setWorkoutType(itemValue);
+                            // clear intensity when type changes to prevent mismatch
+                            setIntensity('');
+                          }}
                           style={styles.picker}
                           itemStyle={styles.pickerItem}
                         >
-                          <Picker.Item label="Select workout type..." value="" color="#6b7280" />
-                          <Picker.Item label="Walking" value="Walking" color="#4b5563" />
-                          <Picker.Item label="Running" value="Running" color="#4b5563" />
-                          <Picker.Item label="Cycling" value="Cycling" color="#4b5563" />
-                          <Picker.Item
-                            label="Strength Training"
-                            value="Strength Training"
-                            color="#4b5563"
-                          />
-                          <Picker.Item label="HIIT" value="HIIT" color="#4b5563" />
-                          <Picker.Item label="Sports" value="Sports" color="#4b5563" />
-                          <Picker.Item label="Other" value="Other" color="#4b5563" />
+                          <Picker.Item label="Select workout type..." value="" color={theme.textMuted} />
+                          <Picker.Item label="Walking" value="Walking" color={theme.text} />
+                          <Picker.Item label="Running" value="Running" color={theme.text} />
+                          <Picker.Item label="Cycling" value="Cycling" color={theme.text} />
+                          <Picker.Item label="Strength Training" value="Strength Training" color={theme.text} />
+                          <Picker.Item label="HIIT" value="HIIT" color={theme.text} />
+                          <Picker.Item label="Sports" value="Sports" color={theme.text} />
+                          <Picker.Item label="Other" value="Other" color={theme.text} />
                         </Picker>
                       </View>
 
                       <TextInput
                         placeholder="Duration (minutes)"
-                        placeholderTextColor="#6b7280"
+                        placeholderTextColor={theme.textMuted}
                         value={durationMinutes}
                         onChangeText={setDurationMinutes}
                         keyboardType="decimal-pad"
                         style={styles.input}
                       />
 
-                      <View style={styles.pickerContainer}>
-                        <Picker
-                          selectedValue={intensity}
-                          onValueChange={(itemValue) => setIntensity(itemValue)}
-                          style={styles.picker}
-                          itemStyle={styles.pickerItem}
-                        >
-                          <Picker.Item label="Select intensity..." value="" color="#6b7280" />
-                          <Picker.Item label="Light" value="Light" color="#4b5563" />
-                          <Picker.Item label="Moderate" value="Moderate" color="#4b5563" />
-                          <Picker.Item label="Hard" value="Hard" color="#4b5563" />
-                        </Picker>
-                      </View>
+                      {workoutType !== '' ? (
+                        <View style={styles.pickerContainer}>
+                          <Picker
+                            selectedValue={intensity}
+                            onValueChange={(itemValue) => setIntensity(itemValue)}
+                            style={styles.picker}
+                            itemStyle={styles.pickerItem}
+                          >
+                            <Picker.Item label="Select specification..." value="" color={theme.textMuted} />
+                            {getIntensityOptions(workoutType).map((option) => (
+                              <Picker.Item key={option} label={option} value={option} color={theme.text} />
+                            ))}
+                          </Picker>
+                        </View>
+                      ) : null}
 
                       {workoutType === 'Strength Training' ? (
                         <>
                           <TextInput
                             placeholder="Exercise name"
-                            placeholderTextColor="#6b7280"
+                            placeholderTextColor={theme.textMuted}
                             value={exerciseName}
                             onChangeText={setExerciseName}
                             style={styles.input}
@@ -376,7 +498,7 @@ function handleDelete(sessionId: number) {
 
                           <TextInput
                             placeholder="Weight lifted (kg)"
-                            placeholderTextColor="#6b7280"
+                            placeholderTextColor={theme.textMuted}
                             value={weightKg}
                             onChangeText={setWeightKg}
                             keyboardType="decimal-pad"
@@ -385,7 +507,7 @@ function handleDelete(sessionId: number) {
 
                           <TextInput
                             placeholder="Reps"
-                            placeholderTextColor="#6b7280"
+                            placeholderTextColor={theme.textMuted}
                             value={reps}
                             onChangeText={setReps}
                             keyboardType="numeric"
@@ -397,7 +519,7 @@ function handleDelete(sessionId: number) {
                       {workoutType === 'Running' ? (
                         <TextInput
                           placeholder="Distance (km)"
-                          placeholderTextColor="#6b7280"
+                          placeholderTextColor={theme.textMuted}
                           value={distanceKm}
                           onChangeText={setDistanceKm}
                           keyboardType="decimal-pad"
@@ -408,7 +530,7 @@ function handleDelete(sessionId: number) {
                       <View style={styles.calorieCard}>
                         <Text style={styles.calorieCardLabel}>Estimated calories burned</Text>
                         <Text style={styles.calorieCardValue}>
-                          {estimatedCalories > 0 ? `${estimatedCalories.toFixed(0)} kcal` : '--'}
+                          {estimatedCalories > 0 ? `${estimatedCalories.toFixed(0)} kcal` : 'N/A'}
                         </Text>
                         <Text style={styles.calorieCardHint}>
                           {latestWeight !== null
@@ -419,7 +541,7 @@ function handleDelete(sessionId: number) {
 
                       <TextInput
                         placeholder="Notes (optional)"
-                        placeholderTextColor="#6b7280"
+                        placeholderTextColor={theme.textMuted}
                         value={notes}
                         onChangeText={setNotes}
                         style={[styles.input, styles.notesInput]}
@@ -435,7 +557,7 @@ function handleDelete(sessionId: number) {
                             setModalVisible(false);
                           }}
                         >
-                          <Text style={styles.actionButtonText}>Cancel</Text>
+                          <Text style={styles.cancelButtonText}>Cancel</Text>
                         </Pressable>
 
                         <Pressable
@@ -447,7 +569,7 @@ function handleDelete(sessionId: number) {
                             });
                           }}
                         >
-                          <Text style={styles.actionButtonText}>Save</Text>
+                          <Text style={styles.saveButtonText}>Save</Text>
                         </Pressable>
                       </View>
                     </ScrollView>
@@ -462,201 +584,304 @@ function handleDelete(sessionId: number) {
   );
 }
 
-const styles = StyleSheet.create({
+// dynamically generated styles to overhaul spatial dynamics and layout
+const getStyles = (theme: typeof Colors.light) => StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    backgroundColor: '#fff',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginBottom: 4,
-    color: '#111827',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#4b5563',
-    marginBottom: 16,
-  },
-  summaryCard: {
-    backgroundColor: '#f3f4f6',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 16,
-  },
-  summaryTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 8,
-    color: '#111827',
-  },
-  summaryText: {
-    fontSize: 15,
-    marginBottom: 4,
-    color: '#111827',
-  },
-  addButton: {
-    backgroundColor: '#2563eb',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
+    backgroundColor: theme.background,
   },
   listContent: {
-    paddingBottom: 24,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 40,
   },
-  emptyText: {
-    color: '#4b5563',
-    textAlign: 'center',
-    marginTop: 40,
+  title: {
+    fontSize: 36,
+    fontWeight: '800',
+    letterSpacing: -1,
+    marginBottom: 4,
+    color: theme.text,
   },
-  entryCard: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 12,
-    padding: 14,
+  subtitle: {
+    fontSize: 16,
+    color: theme.textMuted,
+    marginBottom: 24,
+    fontWeight: '500',
+  },
+  summaryCard: {
+    backgroundColor: theme.surface,
+    borderRadius: 24,
+    padding: 24,
+    marginBottom: 20,
+  },
+  summaryTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    color: theme.textMuted,
   },
-  entryTitle: {
+  summaryText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+    color: theme.text,
+  },
+  addButton: {
+    backgroundColor: theme.text,
+    paddingVertical: 16,
+    borderRadius: 100,
+    alignItems: 'center',
+    marginBottom: 24,
+    shadowColor: theme.text,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  addButtonText: {
+    color: theme.background,
     fontSize: 16,
     fontWeight: '700',
-    color: '#111827',
-    marginBottom: 6,
+  },
+  timerCard: {
+    backgroundColor: theme.surface,
+    borderRadius: 32,
+    padding: 32,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  timerDisplay: {
+    fontSize: 64,
+    fontWeight: '800',
+    letterSpacing: -2,
+    color: theme.text,
+    fontVariant: ['tabular-nums'],
+    marginBottom: 24,
+  },
+  timerControls: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+    justifyContent: 'center',
+  },
+  timerButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 100,
+    alignItems: 'center',
+    flex: 1,
+  },
+  timerButtonTextPrimary: {
+    color: theme.background,
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  timerButtonTextSecondary: {
+    color: theme.text,
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  timerButtonTextDanger: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  startButton: {
+    backgroundColor: theme.text,
+  },
+  pauseButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: theme.border,
+  },
+  resumeButton: {
+    backgroundColor: theme.text,
+  },
+  endButton: {
+    backgroundColor: theme.danger,
+  },
+  resetButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: theme.border,
+  },
+  emptyText: {
+    color: theme.textMuted,
+    textAlign: 'center',
+    marginTop: 40,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  entryCard: {
+    backgroundColor: theme.background,
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: theme.surface,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  entryTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    color: theme.text,
+    marginBottom: 8,
   },
   entryDetail: {
-    fontSize: 14,
-    color: '#374151',
-    marginBottom: 4,
+    fontSize: 15,
+    color: theme.textMuted,
+    marginBottom: 6,
+    fontWeight: '500',
   },
   entryCalories: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#2563eb',
-    marginTop: 4,
-    marginBottom: 6,
+    fontSize: 15,
+    fontWeight: '800',
+    color: theme.text,
+    marginTop: 6,
+    marginBottom: 8,
   },
   entryNotes: {
-    fontSize: 14,
-    color: '#4b5563',
-    marginTop: 4,
+    fontSize: 15,
+    color: theme.textMuted,
+    marginTop: 6,
+    fontStyle: 'italic',
   },
   deleteButton: {
-    marginTop: 10,
+    marginTop: 16,
     alignSelf: 'flex-start',
-    backgroundColor: '#dc2626',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: theme.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 100,
   },
   deleteButtonText: {
-    color: '#fff',
+    color: theme.danger,
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 14,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
   },
   modalWrapper: {
     justifyContent: 'flex-end',
   },
   modalCard: {
-    backgroundColor: '#fff',
-    padding: 20,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '85%',
+    backgroundColor: theme.background,
+    padding: 24,
+    paddingTop: 32,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    maxHeight: '90%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 16,
-    color: '#111827',
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    marginBottom: 24,
+    color: theme.text,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    marginBottom: 12,
-    fontSize: 15,
-    color: '#111827',
-    backgroundColor: '#fff',
+    borderWidth: 0,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginBottom: 16,
+    fontSize: 16,
+    color: theme.text,
+    backgroundColor: theme.surface,
+    fontWeight: '500',
   },
   pickerContainer: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 10,
-    marginBottom: 12,
+    borderWidth: 0,
+    borderRadius: 16,
+    marginBottom: 16,
     overflow: 'hidden',
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
   },
   picker: {
-    color: '#4b5563',
-    backgroundColor: '#fff',
+    color: theme.text,
+    backgroundColor: 'transparent',
   },
   pickerItem: {
-    color: '#4b5563',
-    backgroundColor: '#fff',
+    color: theme.text,
+    backgroundColor: theme.surface,
   },
   calorieCard: {
-    backgroundColor: '#eff6ff',
-    borderWidth: 1,
-    borderColor: '#bfdbfe',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
+    backgroundColor: theme.text,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    alignItems: 'center',
   },
   calorieCardLabel: {
     fontSize: 13,
-    color: '#1d4ed8',
-    marginBottom: 4,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    color: theme.background,
+    marginBottom: 8,
+    opacity: 0.8,
   },
   calorieCardValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1e3a8a',
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -1,
+    color: theme.background,
   },
   calorieCardHint: {
-    marginTop: 6,
+    marginTop: 8,
     fontSize: 12,
-    color: '#4b5563',
+    color: theme.background,
+    opacity: 0.6,
+    textAlign: 'center',
   },
   notesInput: {
-    minHeight: 90,
+    minHeight: 120,
     textAlignVertical: 'top',
+    paddingTop: 16,
   },
   modalActions: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 4,
-    marginBottom: 8,
+    gap: 16,
+    marginTop: 8,
+    marginBottom: 16,
   },
   actionButton: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 10,
+    paddingVertical: 16,
+    borderRadius: 100,
     alignItems: 'center',
   },
   cancelButton: {
-    backgroundColor: '#9ca3af',
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: theme.border,
+  },
+  cancelButtonText: {
+    color: theme.text,
+    fontWeight: '700',
+    fontSize: 16,
   },
   saveButton: {
-    backgroundColor: '#2563eb',
+    backgroundColor: theme.text,
   },
-  actionButtonText: {
-    color: '#fff',
+  saveButtonText: {
+    color: theme.background,
     fontWeight: '700',
-    fontSize: 15,
+    fontSize: 16,
   },
 });

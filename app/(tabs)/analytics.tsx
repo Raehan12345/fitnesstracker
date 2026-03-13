@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useColorScheme,
 } from 'react-native';
 import Svg, {
   Circle,
@@ -15,6 +16,7 @@ import Svg, {
   Rect,
   Text as SvgText,
 } from 'react-native-svg';
+import { Colors } from '../../constants/theme';
 import {
   AnalyticsMode,
   AnalyticsPoint,
@@ -52,15 +54,19 @@ function DualBarChart({
   data,
   leftLabel,
   rightLabel,
-  leftColor = '#2563eb',
-  rightColor = '#16a34a',
+  leftColor,
+  rightColor,
+  theme,
+  styles,
 }: {
   title: string;
   data: DualBarPoint[];
   leftLabel: string;
   rightLabel: string;
-  leftColor?: string;
-  rightColor?: string;
+  leftColor: string;
+  rightColor: string;
+  theme: typeof Colors.light;
+  styles: any;
 }) {
   if (data.length === 0) {
     return (
@@ -120,7 +126,7 @@ function DualBarChart({
             y1={guide.y}
             x2={CHART_WIDTH - paddingRight}
             y2={guide.y}
-            stroke="#e5e7eb"
+            stroke={theme.border}
             strokeWidth="1"
           />
         ))}
@@ -131,8 +137,9 @@ function DualBarChart({
             x={paddingLeft - 6}
             y={guide.y + 4}
             fontSize="10"
-            fill="#6b7280"
+            fill={theme.textMuted}
             textAnchor="end"
+            fontWeight="500"
           >
             {formatNumber(guide.value)}
           </SvgText>
@@ -157,7 +164,7 @@ function DualBarChart({
                 y={leftY}
                 width={barWidth}
                 height={leftHeight}
-                rx={3}
+                rx={barWidth / 2}
                 fill={leftColor}
               />
               <Rect
@@ -165,15 +172,16 @@ function DualBarChart({
                 y={rightY}
                 width={barWidth}
                 height={rightHeight}
-                rx={3}
+                rx={barWidth / 2}
                 fill={rightColor}
               />
               <SvgText
                 x={centerX}
                 y={CHART_HEIGHT - 8}
                 fontSize="10"
-                fill="#6b7280"
+                fill={theme.textMuted}
                 textAnchor="middle"
+                fontWeight="500"
               >
                 {item.label}
               </SvgText>
@@ -189,24 +197,28 @@ function MultiLineChart({
   title,
   primary,
   secondary,
-  primaryColor = '#2563eb',
-  secondaryColor = '#f59e0b',
+  primaryColor,
+  secondaryColor,
   primaryLabel,
   secondaryLabel,
   targetValue,
   targetLabel,
-  targetColor = '#dc2626',
+  targetColor,
+  theme,
+  styles,
 }: {
   title: string;
   primary: (ChartPoint | null)[];
   secondary?: (ChartPoint | null)[];
-  primaryColor?: string;
+  primaryColor: string;
   secondaryColor?: string;
   primaryLabel?: string;
   secondaryLabel?: string;
   targetValue?: number | null;
   targetLabel?: string;
   targetColor?: string;
+  theme: typeof Colors.light;
+  styles: any;
 }) {
   const validPrimary = primary.filter((item): item is ChartPoint => item !== null);
   const validSecondary = (secondary ?? []).filter(
@@ -304,14 +316,14 @@ function MultiLineChart({
           </View>
         ) : null}
 
-        {secondaryLabel ? (
+        {secondaryLabel && secondaryColor ? (
           <View style={styles.legendItem}>
             <View style={[styles.legendSwatch, { backgroundColor: secondaryColor }]} />
             <Text style={styles.legendText}>{secondaryLabel}</Text>
           </View>
         ) : null}
 
-        {targetValue !== null && targetValue !== undefined && targetLabel ? (
+        {targetValue !== null && targetValue !== undefined && targetLabel && targetColor ? (
           <View style={styles.legendItem}>
             <View style={[styles.legendSwatch, { backgroundColor: targetColor }]} />
             <Text style={styles.legendText}>{targetLabel}</Text>
@@ -327,7 +339,7 @@ function MultiLineChart({
             y1={guide.y}
             x2={CHART_WIDTH - paddingRight}
             y2={guide.y}
-            stroke="#e5e7eb"
+            stroke={theme.border}
             strokeWidth="1"
           />
         ))}
@@ -338,14 +350,15 @@ function MultiLineChart({
             x={paddingLeft - 6}
             y={guide.y + 4}
             fontSize="10"
-            fill="#6b7280"
+            fill={theme.textMuted}
             textAnchor="end"
+            fontWeight="500"
           >
             {formatNumber(guide.value)}
           </SvgText>
         ))}
 
-        {targetY !== null ? (
+        {targetY !== null && targetColor ? (
           <>
             <Line
               x1={paddingLeft}
@@ -362,6 +375,7 @@ function MultiLineChart({
               fontSize="10"
               fill={targetColor}
               textAnchor="end"
+              fontWeight="700"
             >
               {targetLabel}
             </SvgText>
@@ -374,15 +388,19 @@ function MultiLineChart({
             fill="none"
             stroke={primaryColor}
             strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           />
         ) : null}
 
-        {secondaryPoints.length > 0 ? (
+        {secondaryPoints.length > 0 && secondaryColor ? (
           <Polyline
             points={secondaryPolyline}
             fill="none"
             stroke={secondaryColor}
             strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           />
         ) : null}
 
@@ -412,8 +430,9 @@ function MultiLineChart({
             x={getX(index, baseLabels.length)}
             y={CHART_HEIGHT - 8}
             fontSize="10"
-            fill="#6b7280"
+            fill={theme.textMuted}
             textAnchor="middle"
+            fontWeight="500"
           >
             {label}
           </SvgText>
@@ -427,10 +446,14 @@ function Heatmap({
   data,
   title,
   profileId,
+  theme,
+  styles,
 }: {
   data: HeatmapCell[];
   title: string;
   profileId: number | undefined;
+  theme: typeof Colors.light;
+  styles: any;
 }) {
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [selectedCell, setSelectedCell] = useState<HeatmapCell | null>(null);
@@ -535,11 +558,10 @@ function Heatmap({
   }
 
   function getColor(count: number) {
-    if (count === 0) return '#f3f4f6';
-    if (count === 1) return '#d9f99d';
-    if (count === 2) return '#86efac';
-    if (count === 3) return '#22c55e';
-    return '#15803d';
+    if (count === 0) return theme.background;
+    if (count === 1) return theme.border;
+    if (count === 2) return theme.textMuted;
+    return theme.text;
   }
 
   function goPreviousMonth() {
@@ -658,20 +680,40 @@ function Heatmap({
                     styles.calendarCell,
                     {
                       backgroundColor: cell ? getColor(cell.count) : 'transparent',
-                      borderWidth: cell ? (isSelected ? 2 : 1) : 0,
-                      borderColor: cell
-                        ? isSelected
-                          ? '#111827'
-                          : '#e5e7eb'
-                        : 'transparent',
+                      borderWidth: cell && isSelected ? 2 : 0,
+                      borderColor: cell && isSelected ? theme.primary : 'transparent',
                     },
                   ]}
                 >
                   {cell ? (
                     <>
-                      <Text style={styles.calendarDayNumber}>{cell.dayNumber}</Text>
+                      <Text
+                        style={[
+                          styles.calendarDayNumber,
+                          {
+                            color:
+                              cell.count >= 2
+                                ? theme.background
+                                : theme.text,
+                          },
+                        ]}
+                      >
+                        {cell.dayNumber}
+                      </Text>
                       {cell.count > 0 ? (
-                        <Text style={styles.calendarCountText}>{cell.count}</Text>
+                        <Text
+                          style={[
+                            styles.calendarCountText,
+                            {
+                              color:
+                                cell.count >= 2
+                                  ? theme.background
+                                  : theme.textMuted,
+                            },
+                          ]}
+                        >
+                          {cell.count}
+                        </Text>
                       ) : null}
                     </>
                   ) : null}
@@ -684,11 +726,10 @@ function Heatmap({
 
       <View style={styles.heatmapLegendRow}>
         <Text style={styles.heatmapLegendText}>Less</Text>
-        <View style={[styles.heatmapLegendCell, { backgroundColor: '#f3f4f6' }]} />
-        <View style={[styles.heatmapLegendCell, { backgroundColor: '#d9f99d' }]} />
-        <View style={[styles.heatmapLegendCell, { backgroundColor: '#86efac' }]} />
-        <View style={[styles.heatmapLegendCell, { backgroundColor: '#22c55e' }]} />
-        <View style={[styles.heatmapLegendCell, { backgroundColor: '#15803d' }]} />
+        <View style={[styles.heatmapLegendCell, { backgroundColor: theme.background }]} />
+        <View style={[styles.heatmapLegendCell, { backgroundColor: theme.border }]} />
+        <View style={[styles.heatmapLegendCell, { backgroundColor: theme.textMuted }]} />
+        <View style={[styles.heatmapLegendCell, { backgroundColor: theme.text }]} />
         <Text style={styles.heatmapLegendText}>More</Text>
       </View>
 
@@ -755,15 +796,17 @@ function Heatmap({
           ) : null}
         </View>
       ) : (
-        <Text style={styles.cardSubtext}>
-          Tap a day to view details.
-        </Text>
+        <Text style={styles.cardSubtext}>Tap a day to view details.</Text>
       )}
     </View>
   );
 }
 
 export default function AnalyticsScreen() {
+  const colorScheme = useColorScheme() ?? 'light';
+  const theme = Colors[colorScheme];
+  const styles = useMemo(() => getStyles(theme), [theme]);
+
   const profileId = useAppStore((state) => state.profile?.id);
   const calorieTarget = useAppStore((state) => state.profile?.calorie_target ?? null);
 
@@ -942,6 +985,8 @@ export default function AnalyticsScreen() {
         title="Consistency Heatmap"
         data={heatmapData}
         profileId={profileId}
+        theme={theme}
+        styles={styles}
       />
 
       <DualBarChart
@@ -949,140 +994,158 @@ export default function AnalyticsScreen() {
         data={caloriesCompareChart}
         leftLabel="Calories In"
         rightLabel="Calories Out"
-        leftColor="#2563eb"
-        rightColor="#16a34a"
+        leftColor={theme.text}
+        rightColor={theme.textMuted}
+        theme={theme}
+        styles={styles}
       />
 
       <MultiLineChart
         title="Calories vs Target"
         primary={caloriesInLine}
         secondary={caloriesInRollingLine}
-        primaryColor="#2563eb"
-        secondaryColor="#f59e0b"
+        primaryColor={theme.text}
+        secondaryColor={theme.textMuted}
         primaryLabel="Actual"
         secondaryLabel="7-period Avg"
         targetValue={calorieTarget}
         targetLabel="Target"
+        targetColor={theme.danger}
+        theme={theme}
+        styles={styles}
       />
 
       <MultiLineChart
         title="Net Calories Trend"
         primary={netCaloriesLine}
-        primaryColor="#7c3aed"
+        primaryColor={theme.text}
         primaryLabel="Net Calories"
+        theme={theme}
+        styles={styles}
       />
 
       <MultiLineChart
         title="Workout Frequency"
         primary={workoutLine}
-        primaryColor="#16a34a"
+        primaryColor={theme.text}
         primaryLabel="Workouts"
+        theme={theme}
+        styles={styles}
       />
 
       <MultiLineChart
         title="Weight Trend"
         primary={weightLine}
         secondary={weightRollingLine}
-        primaryColor="#dc2626"
-        secondaryColor="#2563eb"
+        primaryColor={theme.text}
+        secondaryColor={theme.textMuted}
         primaryLabel="Actual Weight"
         secondaryLabel="7-period Avg"
+        theme={theme}
+        styles={styles}
       />
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: typeof Colors.light) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.background,
   },
   content: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingHorizontal: 24,
+    paddingTop: 32,
     paddingBottom: 40,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
+    fontSize: 36,
+    fontWeight: '800',
+    letterSpacing: -1,
     marginBottom: 4,
-    color: '#111827',
+    color: theme.text,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 18,
+    fontSize: 16,
+    color: theme.textMuted,
+    marginBottom: 24,
+    fontWeight: '500',
   },
   toggleRow: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 18,
+    backgroundColor: theme.surface,
+    borderRadius: 100,
+    padding: 6,
+    marginBottom: 24,
   },
   toggleButton: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingVertical: 12,
+    borderRadius: 100,
     alignItems: 'center',
+    backgroundColor: 'transparent',
   },
   toggleButtonActive: {
-    backgroundColor: '#2563eb',
+    backgroundColor: theme.text,
   },
   toggleButtonText: {
-    color: '#374151',
-    fontWeight: '600',
+    color: theme.textMuted,
+    fontWeight: '700',
+    fontSize: 15,
   },
   toggleButtonTextActive: {
-    color: '#ffffff',
+    color: theme.background,
   },
   summaryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: 16,
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 24,
   },
   summaryCard: {
-    width: '48%',
-    backgroundColor: '#f9fafb',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    width: '47%',
+    backgroundColor: theme.surface,
+    borderRadius: 24,
+    padding: 20,
   },
   summaryLabel: {
-    fontSize: 13,
-    color: '#6b7280',
-    marginBottom: 6,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    color: theme.textMuted,
+    marginBottom: 8,
   },
   summaryValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#111827',
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -1,
+    color: theme.text,
   },
   card: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    backgroundColor: theme.surface,
+    borderRadius: 32,
+    padding: 24,
+    marginBottom: 24,
   },
   cardTitle: {
     fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 10,
-    color: '#111827',
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    marginBottom: 16,
+    color: theme.text,
   },
   emptyText: {
     fontSize: 14,
-    color: '#6b7280',
+    color: theme.textMuted,
+    fontWeight: '500',
   },
   legendRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
-    marginBottom: 10,
+    marginBottom: 16,
   },
   legendItem: {
     flexDirection: 'row',
@@ -1096,173 +1159,150 @@ const styles = StyleSheet.create({
   },
   legendText: {
     fontSize: 13,
-    color: '#4b5563',
+    fontWeight: '600',
+    color: theme.textMuted,
   },
-  heatmapRow: {
-    flexDirection: 'row',
-  },
-  heatmapColumn: {
-    marginRight: 2,
-  },
-
   cardSubtext: {
     marginTop: 10,
-    fontSize: 13,
-    color: '#6b7280',
+    fontSize: 14,
+    fontWeight: '500',
+    color: theme.textMuted,
+    textAlign: 'center',
   },
-
   monthHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    marginBottom: 20,
   },
-
   monthNavButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#eef2ff',
+    width: 44,
+    height: 44,
+    borderRadius: 100,
+    backgroundColor: theme.background,
     alignItems: 'center',
     justifyContent: 'center',
   },
-
   monthNavButtonDisabled: {
-    backgroundColor: '#f3f4f6',
+    opacity: 0.5,
   },
-
   monthNavButtonText: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#2563eb',
+    fontWeight: '800',
+    color: theme.text,
   },
-
   monthNavButtonTextDisabled: {
-    color: '#9ca3af',
+    color: theme.textMuted,
   },
-
   monthTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    color: theme.text,
   },
-
   calendarHeaderRow: {
     flexDirection: 'row',
-    marginBottom: 8,
+    marginBottom: 12,
   },
-
   calendarHeaderCell: {
     flex: 1,
     textAlign: 'center',
     fontSize: 12,
-    fontWeight: '600',
-    color: '#6b7280',
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    color: theme.textMuted,
   },
-
   calendarGrid: {
     gap: 6,
   },
-
   calendarWeekRow: {
     flexDirection: 'row',
     gap: 6,
   },
-
   calendarCell: {
     flex: 1,
     aspectRatio: 1,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 42,
   },
-
   calendarDayNumber: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
-    color: '#111827',
   },
-
   calendarCountText: {
     fontSize: 10,
-    color: '#14532d',
+    fontWeight: '700',
     marginTop: 2,
   },
-
   heatmapLegendRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
+    justifyContent: 'center',
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: theme.border,
   },
-
   heatmapLegendCell: {
-    width: 12,
-    height: 12,
-    borderRadius: 3,
-    marginHorizontal: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 4,
+    marginHorizontal: 3,
   },
-
   heatmapLegendText: {
     fontSize: 12,
-    color: '#6b7280',
-    marginHorizontal: 6,
+    fontWeight: '600',
+    color: theme.textMuted,
+    marginHorizontal: 8,
   },
-
   selectedDayCard: {
-    marginTop: 14,
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    marginTop: 20,
+    backgroundColor: theme.background,
+    borderRadius: 20,
+    padding: 20,
   },
-
   selectedDayTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    color: theme.text,
+    marginBottom: 12,
+  },
+  selectedDayText: {
     fontSize: 15,
-    fontWeight: '700',
-    color: '#111827',
+    fontWeight: '500',
+    color: theme.text,
     marginBottom: 6,
   },
-
-  selectedDayText: {
-    fontSize: 14,
-    color: '#111827',
-    marginBottom: 4,
-  },
-
-  selectedDaySubtext: {
-    fontSize: 13,
-    color: '#6b7280',
-  },
-
   detailSection: {
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
+    borderTopColor: theme.surface,
   },
-
   detailSectionTitle: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 8,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    color: theme.textMuted,
+    marginBottom: 12,
   },
-
   detailRow: {
-    marginBottom: 8,
+    marginBottom: 12,
   },
-
   detailMainText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#111827',
+    fontSize: 15,
+    fontWeight: '700',
+    color: theme.text,
   },
-
   detailSubText: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 2,
+    fontSize: 13,
+    color: theme.textMuted,
+    fontWeight: '500',
+    marginTop: 4,
   },
 });

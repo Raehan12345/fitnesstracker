@@ -1,6 +1,6 @@
 import { Picker } from '@react-native-picker/picker';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -11,19 +11,71 @@ import {
   Text,
   TextInput,
   View,
+  useColorScheme,
 } from 'react-native';
+import { Colors } from '../constants/theme';
 import { createProfile } from '../src/db/database';
 
+function calculateMacros(weight: number, height: number, age: number, sex: string, goal: string, activityLevel: number) {
+  let bmr = 10 * weight + 6.25 * height - 5 * age;
+  bmr += sex === 'Male' ? 5 : -161;
+
+  let calories = bmr * activityLevel;
+
+  if (goal === 'Cut') calories -= 500;
+  if (goal === 'Bulk') calories += 300;
+
+  const protein = weight * 2.2;
+  const fat = weight * 0.8;
+  const remainingCalories = calories - (protein * 4 + fat * 9);
+  
+  const carbs = remainingCalories > 0 ? remainingCalories / 4 : 0;
+
+  return {
+    calories: Math.round(calories),
+    protein: Math.round(protein),
+    carbs: Math.round(carbs),
+    fat: Math.round(fat),
+  };
+}
+
 export default function SetupScreen() {
+  const colorScheme = useColorScheme() ?? 'light';
+  const theme = Colors[colorScheme];
+  const styles = useMemo(() => getStyles(theme), [theme]);
+
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
   const [sex, setSex] = useState('');
   const [heightCm, setHeightCm] = useState('');
   const [startingWeightKg, setStartingWeightKg] = useState('');
+  
+  const [goal, setGoal] = useState('Maintain');
+  const [activityMultiplier, setActivityMultiplier] = useState('1.2');
+
   const [calorieTarget, setCalorieTarget] = useState('');
   const [proteinTarget, setProteinTarget] = useState('');
   const [carbsTarget, setCarbsTarget] = useState('');
   const [fatTarget, setFatTarget] = useState('');
+
+  function autoCalculate() {
+    const weightNum = Number(startingWeightKg);
+    const heightNum = Number(heightCm);
+    const ageNum = Number(age);
+    const activityNum = Number(activityMultiplier);
+
+    if (!weightNum || !heightNum || !ageNum || !sex) {
+      Alert.alert('Missing Info', 'Please fill in age, sex, height, and weight first.');
+      return;
+    }
+
+    const macros = calculateMacros(weightNum, heightNum, ageNum, sex, goal, activityNum);
+
+    setCalorieTarget(String(macros.calories));
+    setProteinTarget(String(macros.protein));
+    setCarbsTarget(String(macros.carbs));
+    setFatTarget(String(macros.fat));
+  }
 
   async function handleSave() {
     const parsedAge = Number(age);
@@ -105,11 +157,11 @@ export default function SetupScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.title}>Set Up Profile</Text>
-        <Text style={styles.subtitle}>Let&apos;s personalize your tracker</Text>
+        <Text style={styles.subtitle}>Let us personalize your tracker</Text>
 
         <TextInput
           placeholder="Name"
-          placeholderTextColor="#6b7280"
+          placeholderTextColor={theme.textMuted}
           value={name}
           onChangeText={setName}
           style={styles.input}
@@ -117,7 +169,7 @@ export default function SetupScreen() {
 
         <TextInput
           placeholder="Age"
-          placeholderTextColor="#6b7280"
+          placeholderTextColor={theme.textMuted}
           value={age}
           onChangeText={setAge}
           keyboardType="numeric"
@@ -131,16 +183,16 @@ export default function SetupScreen() {
             style={styles.picker}
             itemStyle={styles.pickerItem}
           >
-            <Picker.Item label="Select sex..." value="" color="#6b7280" />
-            <Picker.Item label="Male" value="Male" color="#4b5563" />
-            <Picker.Item label="Female" value="Female" color="#4b5563" />
-            <Picker.Item label="Other" value="Other" color="#4b5563" />
+            <Picker.Item label="Select sex..." value="" color={theme.textMuted} />
+            <Picker.Item label="Male" value="Male" color={theme.text} />
+            <Picker.Item label="Female" value="Female" color={theme.text} />
+            <Picker.Item label="Other" value="Other" color={theme.text} />
           </Picker>
         </View>
 
         <TextInput
           placeholder="Height (cm)"
-          placeholderTextColor="#6b7280"
+          placeholderTextColor={theme.textMuted}
           value={heightCm}
           onChangeText={setHeightCm}
           keyboardType="decimal-pad"
@@ -149,16 +201,54 @@ export default function SetupScreen() {
 
         <TextInput
           placeholder="Starting weight (kg)"
-          placeholderTextColor="#6b7280"
+          placeholderTextColor={theme.textMuted}
           value={startingWeightKg}
           onChangeText={setStartingWeightKg}
           keyboardType="decimal-pad"
           style={styles.input}
         />
 
+        <Text style={styles.sectionTitle}>Lifestyle and Goals</Text>
+
+        <View style={styles.pickerContainer}>
+          <Picker
+            selectedValue={goal}
+            onValueChange={(v) => setGoal(v)}
+            style={styles.picker}
+            itemStyle={styles.pickerItem}
+          >
+            <Picker.Item label="Maintain" value="Maintain" color={theme.text} />
+            <Picker.Item label="Cut" value="Cut" color={theme.text} />
+            <Picker.Item label="Bulk" value="Bulk" color={theme.text} />
+          </Picker>
+        </View>
+
+        <View style={styles.pickerContainer}>
+          <Picker
+            selectedValue={activityMultiplier}
+            onValueChange={(v) => setActivityMultiplier(v)}
+            style={styles.picker}
+            itemStyle={styles.pickerItem}
+          >
+            <Picker.Item label="Sedentary (No Exercise)" value="1.2" color={theme.text} />
+            <Picker.Item label="Lightly Active (1-3 days/week)" value="1.375" color={theme.text} />
+            <Picker.Item label="Moderately Active (3-5 days/week)" value="1.55" color={theme.text} />
+            <Picker.Item label="Very Active (6-7 days/week)" value="1.725" color={theme.text} />
+            <Picker.Item label="Extra Active (Physical Job)" value="1.9" color={theme.text} />
+          </Picker>
+        </View>
+
+        <Pressable style={styles.calcButton} onPress={autoCalculate}>
+          <Text style={styles.calcButtonText}>
+            Auto Calculate Macros
+          </Text>
+        </Pressable>
+
+        <Text style={styles.sectionTitle}>Macro Targets</Text>
+
         <TextInput
           placeholder="Calorie target"
-          placeholderTextColor="#6b7280"
+          placeholderTextColor={theme.textMuted}
           value={calorieTarget}
           onChangeText={setCalorieTarget}
           keyboardType="numeric"
@@ -167,7 +257,7 @@ export default function SetupScreen() {
 
         <TextInput
           placeholder="Protein target (g)"
-          placeholderTextColor="#6b7280"
+          placeholderTextColor={theme.textMuted}
           value={proteinTarget}
           onChangeText={setProteinTarget}
           keyboardType="numeric"
@@ -176,7 +266,7 @@ export default function SetupScreen() {
 
         <TextInput
           placeholder="Carbs target (g)"
-          placeholderTextColor="#6b7280"
+          placeholderTextColor={theme.textMuted}
           value={carbsTarget}
           onChangeText={setCarbsTarget}
           keyboardType="numeric"
@@ -185,7 +275,7 @@ export default function SetupScreen() {
 
         <TextInput
           placeholder="Fat target (g)"
-          placeholderTextColor="#6b7280"
+          placeholderTextColor={theme.textMuted}
           value={fatTarget}
           onChangeText={setFatTarget}
           keyboardType="numeric"
@@ -198,70 +288,91 @@ export default function SetupScreen() {
             Alert.alert('Error', 'Could not create profile.');
           });
         }}>
-          <Text style={styles.saveButtonText}>Save Profile</Text>
+          <Text style={styles.saveButtonText}>Complete Setup</Text>
         </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: typeof Colors.light) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.background,
   },
   content: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingTop: 40,
     paddingBottom: 40,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111827',
+    fontSize: 36,
+    fontWeight: '800',
+    letterSpacing: -1,
+    color: theme.text,
     marginBottom: 4,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 20,
+    fontSize: 16,
+    color: theme.textMuted,
+    marginBottom: 32,
+    fontWeight: '500',
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    marginTop: 16,
+    marginBottom: 16,
+    color: theme.text,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    marginBottom: 12,
-    fontSize: 15,
-    color: '#111827',
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginBottom: 16,
+    fontSize: 16,
+    color: theme.text,
+    fontWeight: '500',
   },
   pickerContainer: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 10,
-    marginBottom: 12,
+    backgroundColor: theme.surface,
+    borderRadius: 16,
+    marginBottom: 16,
     overflow: 'hidden',
-    backgroundColor: '#fff',
   },
   picker: {
-    color: '#4b5563',
-    backgroundColor: '#fff',
+    color: theme.text,
+    backgroundColor: 'transparent',
   },
   pickerItem: {
-    color: '#4b5563',
-    backgroundColor: '#fff',
+    color: theme.text,
+    backgroundColor: theme.surface,
+  },
+  calcButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: theme.border,
+    paddingVertical: 16,
+    borderRadius: 100,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  calcButtonText: {
+    color: theme.text,
+    fontWeight: '700',
+    fontSize: 16,
   },
   saveButton: {
-    backgroundColor: '#2563eb',
-    paddingVertical: 14,
-    borderRadius: 12,
+    backgroundColor: theme.text,
+    paddingVertical: 16,
+    borderRadius: 100,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 24,
   },
   saveButtonText: {
-    color: '#fff',
+    color: theme.background,
     fontSize: 16,
     fontWeight: '700',
   },

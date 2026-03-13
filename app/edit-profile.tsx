@@ -1,6 +1,6 @@
 import { Picker } from '@react-native-picker/picker';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -11,25 +11,33 @@ import {
   Text,
   TextInput,
   View,
+  useColorScheme,
 } from 'react-native';
 
+import { Colors } from '../constants/theme';
 import { updateProfile } from '../src/db/database';
 import { useAppStore } from '../src/store/useAppStore';
 
-function calculateMacros(weight: number, goal: string) {
+// added activity level multiplier
+function calculateMacros(weight: number, height: number, age: number, sex: string, goal: string, activityLevel: number) {
+  // calculate base metabolic rate using mifflin-st jeor equation
+  let bmr = 10 * weight + 6.25 * height - 5 * age;
+  bmr += sex === 'Male' ? 5 : -161;
 
-  let calories = weight * 33;
+  // apply the user selected activity multiplier
+  let calories = bmr * activityLevel;
 
-  if (goal === 'Cut') calories -= 400;
+  // standard adjustments for body composition goals
+  if (goal === 'Cut') calories -= 500;
   if (goal === 'Bulk') calories += 300;
 
-  const protein = weight * 2;
+  // prioritize high protein to preserve muscle mass
+  const protein = weight * 2.2;
   const fat = weight * 0.8;
-
-  const remainingCalories =
-    calories - (protein * 4 + fat * 9);
-
-  const carbs = remainingCalories / 4;
+  const remainingCalories = calories - (protein * 4 + fat * 9);
+  
+  // prevent negative carbohydrates if calories drop too low
+  const carbs = remainingCalories > 0 ? remainingCalories / 4 : 0;
 
   return {
     calories: Math.round(calories),
@@ -40,6 +48,9 @@ function calculateMacros(weight: number, goal: string) {
 }
 
 export default function EditProfileScreen() {
+  const colorScheme = useColorScheme() ?? 'light';
+  const theme = Colors[colorScheme];
+  const styles = useMemo(() => getStyles(theme), [theme]);
 
   const profile = useAppStore((state) => state.profile);
   const refreshAll = useAppStore((state) => state.refreshAll);
@@ -51,6 +62,7 @@ export default function EditProfileScreen() {
   const [weight, setWeight] = useState(String(profile?.starting_weight_kg ?? ''));
 
   const [goal, setGoal] = useState('Maintain');
+  const [activityMultiplier, setActivityMultiplier] = useState('1.2');
 
   const [calories, setCalories] = useState(String(profile?.calorie_target ?? ''));
   const [protein, setProtein] = useState(String(profile?.protein_target ?? ''));
@@ -58,15 +70,17 @@ export default function EditProfileScreen() {
   const [fat, setFat] = useState(String(profile?.fat_target ?? ''));
 
   function autoCalculate() {
-
     const weightNum = Number(weight);
+    const heightNum = Number(height);
+    const ageNum = Number(age);
+    const activityNum = Number(activityMultiplier);
 
-    if (!weightNum) {
-      Alert.alert('Enter body weight first');
+    if (!weightNum || !heightNum || !ageNum || !sex) {
+      Alert.alert('Missing Info', 'Please fill in age, sex, height, and weight first.');
       return;
     }
 
-    const macros = calculateMacros(weightNum, goal);
+    const macros = calculateMacros(weightNum, heightNum, ageNum, sex, goal, activityNum);
 
     setCalories(String(macros.calories));
     setProtein(String(macros.protein));
@@ -75,7 +89,6 @@ export default function EditProfileScreen() {
   }
 
   async function handleSave() {
-
     if (!profile) return;
 
     await updateProfile(profile.id, {
@@ -104,13 +117,12 @@ export default function EditProfileScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-
         <Text style={styles.title}>Edit Profile</Text>
 
         <TextInput
           style={styles.input}
           placeholder="Name"
-          placeholderTextColor={'#d1d5db'}
+          placeholderTextColor={theme.textMuted}
           value={name}
           onChangeText={setName}
         />
@@ -118,7 +130,7 @@ export default function EditProfileScreen() {
         <TextInput
           style={styles.input}
           placeholder="Age"
-          placeholderTextColor={'#d1d5db'}
+          placeholderTextColor={theme.textMuted}
           keyboardType="numeric"
           value={age}
           onChangeText={setAge}
@@ -128,17 +140,19 @@ export default function EditProfileScreen() {
           <Picker
             selectedValue={sex}
             onValueChange={(v) => setSex(v)}
+            style={styles.picker}
+            itemStyle={styles.pickerItem}
           >
-            <Picker.Item label="Sex" value="" color='#acadad' />
-            <Picker.Item label="Male" value="Male" color='#282a2d' />
-            <Picker.Item label="Female" value="Female" color='#282a2d' />
+            <Picker.Item label="Select Sex" value="" color={theme.textMuted} />
+            <Picker.Item label="Male" value="Male" color={theme.text} />
+            <Picker.Item label="Female" value="Female" color={theme.text} />
           </Picker>
         </View>
 
         <TextInput
           style={styles.input}
           placeholder="Height (cm)"
-          placeholderTextColor={'#d1d5db'}
+          placeholderTextColor={theme.textMuted}
           keyboardType="decimal-pad"
           value={height}
           onChangeText={setHeight}
@@ -147,7 +161,7 @@ export default function EditProfileScreen() {
         <TextInput
           style={styles.input}
           placeholder="Weight (kg)"
-          placeholderTextColor={'#d1d5db'}
+          placeholderTextColor={theme.textMuted}
           keyboardType="decimal-pad"
           value={weight}
           onChangeText={setWeight}
@@ -157,10 +171,27 @@ export default function EditProfileScreen() {
           <Picker
             selectedValue={goal}
             onValueChange={(v) => setGoal(v)}
+            style={styles.picker}
+            itemStyle={styles.pickerItem}
           >
-            <Picker.Item label="Maintain" value="Maintain" color='#282a2d'/>
-            <Picker.Item label="Cut" value="Cut" color='#282a2d' />
-            <Picker.Item label="Bulk" value="Bulk" color='#282a2d' />
+            <Picker.Item label="Maintain" value="Maintain" color={theme.text} />
+            <Picker.Item label="Cut" value="Cut" color={theme.text} />
+            <Picker.Item label="Bulk" value="Bulk" color={theme.text} />
+          </Picker>
+        </View>
+
+        <View style={styles.pickerBox}>
+          <Picker
+            selectedValue={activityMultiplier}
+            onValueChange={(v) => setActivityMultiplier(v)}
+            style={styles.picker}
+            itemStyle={styles.pickerItem}
+          >
+            <Picker.Item label="Sedentary (No Exercise)" value="1.2" color={theme.text} />
+            <Picker.Item label="Lightly Active (1-3 days/week)" value="1.375" color={theme.text} />
+            <Picker.Item label="Moderately Active (3-5 days/week)" value="1.55" color={theme.text} />
+            <Picker.Item label="Very Active (6-7 days/week)" value="1.725" color={theme.text} />
+            <Picker.Item label="Extra Active (Physical Job)" value="1.9" color={theme.text} />
           </Picker>
         </View>
 
@@ -175,7 +206,7 @@ export default function EditProfileScreen() {
         <TextInput
           style={styles.input}
           placeholder="Calories"
-          placeholderTextColor={'#d1d5db'}
+          placeholderTextColor={theme.textMuted}
           keyboardType="numeric"
           value={calories}
           onChangeText={setCalories}
@@ -184,7 +215,7 @@ export default function EditProfileScreen() {
         <TextInput
           style={styles.input}
           placeholder="Protein (g)"
-          placeholderTextColor={'#d1d5db'}
+          placeholderTextColor={theme.textMuted}
           keyboardType="numeric"
           value={protein}
           onChangeText={setProtein}
@@ -193,7 +224,7 @@ export default function EditProfileScreen() {
         <TextInput
           style={styles.input}
           placeholder="Carbs (g)"
-          placeholderTextColor={'#d1d5db'}
+          placeholderTextColor={theme.textMuted}
           keyboardType="numeric"
           value={carbs}
           onChangeText={setCarbs}
@@ -202,7 +233,7 @@ export default function EditProfileScreen() {
         <TextInput
           style={styles.input}
           placeholder="Fat (g)"
-          placeholderTextColor={'#d1d5db'}
+          placeholderTextColor={theme.textMuted}
           keyboardType="numeric"
           value={fat}
           onChangeText={setFat}
@@ -217,72 +248,76 @@ export default function EditProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-
+const getStyles = (theme: typeof Colors.light) => StyleSheet.create({
   container: {
-    padding: 20,
+    paddingHorizontal: 24,
+    paddingTop: 32,
     paddingBottom: 40,
-    backgroundColor: '#ffffff'
+    backgroundColor: theme.background,
   },
-
   title: {
-    fontSize: 26,
-    fontWeight: '700',
-    marginBottom: 20,
-    color: '#111827',
+    fontSize: 36,
+    fontWeight: '800',
+    letterSpacing: -1,
+    marginBottom: 24,
+    color: theme.text,
   },
-
   section: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginTop: 20,
-    marginBottom: 10,
-    color: '#111827'
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    marginTop: 24,
+    marginBottom: 16,
+    color: theme.text,
   },
-
   input: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 12,
-    fontSize: 15,
-    backgroundColor: '#ffffff',
-    color: '#111827'
+    backgroundColor: theme.surface,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginBottom: 16,
+    fontSize: 16,
+    color: theme.text,
+    fontWeight: '500',
   },
-
   pickerBox: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 10,
-    marginBottom: 12,
-    backgroundColor: '#ffffff'
+    backgroundColor: theme.surface,
+    borderRadius: 16,
+    marginBottom: 16,
+    overflow: 'hidden',
   },
-
+  picker: {
+    color: theme.text,
+    backgroundColor: 'transparent',
+  },
+  pickerItem: {
+    color: theme.text,
+    backgroundColor: theme.surface,
+  },
   calcButton: {
-    backgroundColor: '#2563eb',
-    padding: 14,
-    borderRadius: 10,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: theme.border,
+    paddingVertical: 16,
+    borderRadius: 100,
     alignItems: 'center',
+    marginBottom: 8,
   },
-
   calcText: {
-    color: '#ffffff',
-    fontWeight: '700',
-  },
-
-  saveButton: {
-    backgroundColor: '#16a34a',
-    padding: 16,
-    borderRadius: 12,
-    marginTop: 20,
-    alignItems: 'center',
-  },
-
-  saveText: {
-    color: '#ffffff',
+    color: theme.text,
     fontWeight: '700',
     fontSize: 16,
   },
-
+  saveButton: {
+    backgroundColor: theme.text,
+    paddingVertical: 16,
+    borderRadius: 100,
+    marginTop: 24,
+    alignItems: 'center',
+  },
+  saveText: {
+    color: theme.background,
+    fontWeight: '700',
+    fontSize: 16,
+  },
 });
