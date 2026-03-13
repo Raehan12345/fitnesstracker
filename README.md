@@ -23,12 +23,8 @@ A comprehensive, offline-first cross-platform fitness and nutrition tracking app
 
 ## Getting Started
 
-### Prerequisites
-Ensure you have Node.js and npm installed on your local machine.
+### Installation for iOS
 
-### Installation
-
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd fitnesstracker
+1. Open in Safari
+2. Press Share
+3. Save to home screen
