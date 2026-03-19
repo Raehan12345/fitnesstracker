@@ -52,6 +52,28 @@ export type FoodEntryInput = {
   fats: number;
 };
 
+export type QuickAddFood = {
+  id: number;
+  profile_id: number;
+  meal_type: string;
+  food_name: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fats: number;
+  created_at: string;
+};
+
+export type QuickAddFoodInput = {
+  profileId: number;
+  mealType: string;
+  foodName: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fats: number;
+};
+
 export type WorkoutSession = {
   id: number;
   profile_id: number;
@@ -151,6 +173,7 @@ export type HeatmapCell = {
 
 type ProfileRow = Profile;
 type FoodEntryRow = FoodEntry;
+type QuickAddFoodRow = QuickAddFood;
 
 export type WorkoutSessionRow = {
   id?: number;
@@ -190,6 +213,7 @@ export type BackupPayload = {
   exported_at: string;
   profiles: Profile[];
   food_entries: FoodEntry[];
+  quick_add_foods: QuickAddFood[];
   workout_sessions: WorkoutSessionRow[];
   strength_entries: StrengthEntryRow[];
   run_entries: RunEntryRow[];
@@ -225,6 +249,7 @@ export type DayBreakdown = {
 class MacroTrackerWebDB extends Dexie {
   profiles!: Table<ProfileRow, number>;
   food_entries!: Table<FoodEntryRow, number>;
+  quick_add_foods!: Table<QuickAddFoodRow, number>;
   workout_sessions!: Table<WorkoutSessionRow, number>;
   strength_entries!: Table<StrengthEntryRow, number>;
   run_entries!: Table<RunEntryRow, number>;
@@ -233,12 +258,11 @@ class MacroTrackerWebDB extends Dexie {
   constructor() {
     super('macro_tracker_web');
 
-    this.version(2).stores({
+    this.version(3).stores({
       profiles: '++id, name, created_at',
-      food_entries:
-        '++id, profile_id, entry_date, [profile_id+entry_date], meal_type, created_at',
-      workout_sessions:
-        '++id, profile_id, session_date, [profile_id+session_date], workout_type, created_at',
+      food_entries: '++id, profile_id, entry_date, [profile_id+entry_date], meal_type, created_at',
+      quick_add_foods: '++id, profile_id, meal_type, created_at',
+      workout_sessions: '++id, profile_id, session_date, [profile_id+session_date], workout_type, created_at',
       strength_entries: '++id, workout_session_id, exercise_name, created_at',
       run_entries: '++id, workout_session_id, created_at',
       body_metrics: '++id, profile_id, entry_date, created_at',
@@ -285,54 +309,33 @@ function getMonthKey(date: Date) {
 
 function getDailyPeriods(days = 7) {
   const periods: { key: string; label: string; start: Date }[] = [];
-
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     d.setDate(d.getDate() - i);
-
-    periods.push({
-      key: formatDateKey(d),
-      label: `${d.getDate()}/${d.getMonth() + 1}`,
-      start: d,
-    });
+    periods.push({ key: formatDateKey(d), label: `${d.getDate()}/${d.getMonth() + 1}`, start: d });
   }
-
   return periods;
 }
 
 function getWeeklyPeriods(weeks = 8) {
   const periods: { key: string; label: string; start: Date }[] = [];
   const currentWeekStart = getWeekStart(new Date());
-
   for (let i = weeks - 1; i >= 0; i--) {
     const d = new Date(currentWeekStart);
     d.setDate(d.getDate() - i * 7);
-
-    periods.push({
-      key: formatDateKey(d),
-      label: `${d.getDate()}/${d.getMonth() + 1}`,
-      start: d,
-    });
+    periods.push({ key: formatDateKey(d), label: `${d.getDate()}/${d.getMonth() + 1}`, start: d });
   }
-
   return periods;
 }
 
 function getMonthlyPeriods(months = 6) {
   const periods: { key: string; label: string; start: Date }[] = [];
   const now = new Date();
-
   for (let i = months - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-
-    periods.push({
-      key: getMonthKey(d),
-      label: d.toLocaleString('en-US', { month: 'short' }),
-      start: d,
-    });
+    periods.push({ key: getMonthKey(d), label: d.toLocaleString('en-US', { month: 'short' }), start: d });
   }
-
   return periods;
 }
 
@@ -345,6 +348,7 @@ export async function resetDatabase() {
     db.strength_entries.clear(),
     db.run_entries.clear(),
     db.food_entries.clear(),
+    db.quick_add_foods.clear(),
     db.body_metrics.clear(),
     db.workout_sessions.clear(),
     db.profiles.clear(),
@@ -369,7 +373,6 @@ export async function createProfile(input: CreateProfileInput) {
     fat_target: input.fatTarget,
     created_at: nowIso(),
   } as ProfileRow);
-
   return id;
 }
 
@@ -411,13 +414,51 @@ export async function getFoodEntriesByDate(profileId: number, entryDate: string)
     .equals([profileId, entryDate] as [number, string])
     .reverse()
     .sortBy('id');
-
   return rows.reverse();
+}
+
+export async function addQuickAddFood(input: QuickAddFoodInput) {
+  await db.quick_add_foods.add({
+    profile_id: input.profileId,
+    meal_type: input.mealType,
+    food_name: input.foodName,
+    calories: input.calories,
+    protein: input.protein,
+    carbs: input.carbs,
+    fats: input.fats,
+    created_at: nowIso(),
+  } as QuickAddFoodRow);
+}
+
+export async function updateQuickAddFood(id: number, input: QuickAddFoodInput) {
+  await db.quick_add_foods.update(id, {
+    meal_type: input.mealType,
+    food_name: input.foodName,
+    calories: input.calories,
+    protein: input.protein,
+    carbs: input.carbs,
+    fats: input.fats,
+  });
+}
+
+export async function getQuickAddFoods(profileId: number) {
+  const rows = await db.quick_add_foods
+    .where('profile_id')
+    .equals(profileId)
+    .toArray();
+  
+  return rows.sort((a, b) => {
+    if (a.meal_type !== b.meal_type) return a.meal_type.localeCompare(b.meal_type);
+    return a.food_name.localeCompare(b.food_name);
+  });
+}
+
+export async function deleteQuickAddFood(id: number) {
+  await db.quick_add_foods.delete(id);
 }
 
 export async function getFoodSummaryByDate(profileId: number, entryDate: string) {
   const entries = await getFoodEntriesByDate(profileId, entryDate);
-
   return entries.reduce(
     (acc, entry) => {
       acc.totalCalories += entry.calories;
@@ -427,13 +468,7 @@ export async function getFoodSummaryByDate(profileId: number, entryDate: string)
       acc.entryCount += 1;
       return acc;
     },
-    {
-      totalCalories: 0,
-      totalProtein: 0,
-      totalCarbs: 0,
-      totalFats: 0,
-      entryCount: 0,
-    }
+    { totalCalories: 0, totalProtein: 0, totalCarbs: 0, totalFats: 0, entryCount: 0 }
   );
 }
 
@@ -450,7 +485,6 @@ export async function addWorkoutSession(input: WorkoutSessionInput) {
     estimated_calories: input.estimatedCalories,
     created_at: nowIso(),
   });
-
   return id;
 }
 
@@ -484,12 +518,8 @@ export async function getWorkoutSessionsByDate(profileId: number, sessionDate: s
 
   return sessions
     .map((session) => {
-      const strength = strengthEntries.find(
-        (entry) => entry.workout_session_id === session.id
-      );
-      const run = runEntries.find(
-        (entry) => entry.workout_session_id === session.id
-      );
+      const strength = strengthEntries.find((entry) => entry.workout_session_id === session.id);
+      const run = runEntries.find((entry) => entry.workout_session_id === session.id);
 
       return {
         ...session,
@@ -504,15 +534,8 @@ export async function getWorkoutSessionsByDate(profileId: number, sessionDate: s
 }
 
 export async function deleteWorkoutSession(id: number) {
-  const strengthRows = await db.strength_entries
-    .where('workout_session_id')
-    .equals(id)
-    .toArray();
-
-  const runRows = await db.run_entries
-    .where('workout_session_id')
-    .equals(id)
-    .toArray();
+  const strengthRows = await db.strength_entries.where('workout_session_id').equals(id).toArray();
+  const runRows = await db.run_entries.where('workout_session_id').equals(id).toArray();
 
   await Promise.all([
     ...strengthRows.map((row) => db.strength_entries.delete(row.id!)),
@@ -529,10 +552,7 @@ export async function getWorkoutSummaryByDate(profileId: number, sessionDate: st
 
   return {
     workoutCount: sessions.length,
-    totalCaloriesBurned: sessions.reduce(
-      (sum, row) => sum + (row.estimated_calories ?? 0),
-      0
-    ),
+    totalCaloriesBurned: sessions.reduce((sum, row) => sum + (row.estimated_calories ?? 0), 0),
   };
 }
 
@@ -547,7 +567,6 @@ export async function addBodyMetric(input: BodyMetricInput) {
 
 export async function getBodyMetrics(profileId: number) {
   const rows = await db.body_metrics.where('profile_id').equals(profileId).toArray();
-
   return rows.sort((a, b) => {
     if (a.entry_date === b.entry_date) return b.id - a.id;
     return a.entry_date < b.entry_date ? 1 : -1;
@@ -581,16 +600,13 @@ export async function getStrengthPbs(profileId: number) {
     })
     .filter((row): row is StrengthPb => row !== null)
     .sort((a, b) => {
-      if (a.exerciseName !== b.exerciseName) {
-        return a.exerciseName.localeCompare(b.exerciseName);
-      }
+      if (a.exerciseName !== b.exerciseName) return a.exerciseName.localeCompare(b.exerciseName);
       if (a.weightKg !== b.weightKg) return b.weightKg - a.weightKg;
       if (a.reps !== b.reps) return b.reps - a.reps;
       return a.sessionDate < b.sessionDate ? 1 : -1;
     });
 
   const map = new Map<string, StrengthPb>();
-
   for (const row of joined) {
     if (!map.has(row.exerciseName)) {
       map.set(row.exerciseName, row);
@@ -620,11 +636,7 @@ export async function getRunPbs(profileId: number): Promise<RunPbSummary> {
     .filter((row): row is RunPb => row !== null);
 
   if (mapped.length === 0) {
-    return {
-      longestRun: null,
-      fastestPace: null,
-      fastest5k: null,
-    };
+    return { longestRun: null, fastestPace: null, fastest5k: null };
   }
 
   const longestRun = mapped.reduce(
@@ -637,50 +649,26 @@ export async function getRunPbs(profileId: number): Promise<RunPbSummary> {
     null as RunPb | null
   );
 
-  const fiveKs = mapped.filter(
-    (run) => run.distanceKm >= 4.95 && run.distanceKm <= 5.05
-  );
+  const fiveKs = mapped.filter((run) => run.distanceKm >= 4.95 && run.distanceKm <= 5.05);
 
   const fastest5k = fiveKs.reduce(
-    (best, current) =>
-      !best || current.durationMinutes < best.durationMinutes ? current : best,
+    (best, current) => !best || current.durationMinutes < best.durationMinutes ? current : best,
     null as RunPb | null
   );
 
-  return {
-    longestRun,
-    fastestPace,
-    fastest5k,
-  };
+  return { longestRun, fastestPace, fastest5k };
 }
 
-export async function getAnalyticsSeries(
-  profileId: number,
-  mode: AnalyticsMode
-): Promise<AnalyticsPoint[]> {
-  const periods =
-    mode === 'daily'
-      ? getDailyPeriods(7)
-      : mode === 'weekly'
-      ? getWeeklyPeriods(8)
-      : getMonthlyPeriods(6);
+export async function getAnalyticsSeries(profileId: number, mode: AnalyticsMode): Promise<AnalyticsPoint[]> {
+  const periods = mode === 'daily' ? getDailyPeriods(7) : mode === 'weekly' ? getWeeklyPeriods(8) : getMonthlyPeriods(6);
 
   const foodRows = await db.food_entries.where('profile_id').equals(profileId).toArray();
   const workoutRows = await db.workout_sessions.where('profile_id').equals(profileId).toArray();
   const weightRows = await db.body_metrics.where('profile_id').equals(profileId).toArray();
 
   const map = new Map<string, AnalyticsPoint>();
-
   for (const period of periods) {
-    map.set(period.key, {
-      key: period.key,
-      label: period.label,
-      caloriesIn: 0,
-      caloriesOut: 0,
-      netCalories: 0,
-      workouts: 0,
-      avgWeight: null,
-    });
+    map.set(period.key, { key: period.key, label: period.label, caloriesIn: 0, caloriesOut: 0, netCalories: 0, workouts: 0, avgWeight: null });
   }
 
   function resolveKey(dateStr: string) {
@@ -706,20 +694,16 @@ export async function getAnalyticsSeries(
   }
 
   const weightBuckets = new Map<string, number[]>();
-
   for (const row of weightRows) {
     const key = resolveKey(row.entry_date);
-    if (!weightBuckets.has(key)) {
-      weightBuckets.set(key, []);
-    }
+    if (!weightBuckets.has(key)) weightBuckets.set(key, []);
     weightBuckets.get(key)!.push(row.body_weight);
   }
 
   for (const [key, weights] of weightBuckets.entries()) {
     const point = map.get(key);
     if (point && weights.length > 0) {
-      point.avgWeight =
-        weights.reduce((sum, value) => sum + value, 0) / weights.length;
+      point.avgWeight = weights.reduce((sum, value) => sum + value, 0) / weights.length;
     }
   }
 
@@ -729,18 +713,11 @@ export async function getAnalyticsSeries(
   }));
 }
 
-export function calculateRollingAverage(
-  values: (number | null)[],
-  windowSize = 7
-) {
+export function calculateRollingAverage(values: (number | null)[], windowSize = 7) {
   return values.map((_, index) => {
     const start = Math.max(0, index - windowSize + 1);
-    const slice = values
-      .slice(start, index + 1)
-      .filter((value): value is number => value !== null);
-
+    const slice = values.slice(start, index + 1).filter((value): value is number => value !== null);
     if (slice.length === 0) return null;
-
     return slice.reduce((sum, value) => sum + value, 0) / slice.length;
   });
 }
@@ -775,32 +752,21 @@ export async function getHeatmapData(profileId: number, days = 90): Promise<Heat
   }
 
   const result: HeatmapCell[] = [];
-
   for (let i = 0; i < days; i++) {
     const d = new Date(start);
     d.setDate(start.getDate() + i);
     const key = formatDateKey(d);
-
-    result.push({
-      date: key,
-      count: counts.get(key) ?? 0,
-    });
+    result.push({ date: key, count: counts.get(key) ?? 0 });
   }
 
   return result;
 }
 
 export async function exportBackupData(): Promise<BackupPayload> {
-  const [
-    profiles,
-    food_entries,
-    workout_sessions,
-    strength_entries,
-    run_entries,
-    body_metrics,
-  ] = await Promise.all([
+  const [profiles, food_entries, quick_add_foods, workout_sessions, strength_entries, run_entries, body_metrics] = await Promise.all([
     db.profiles.toArray(),
     db.food_entries.toArray(),
+    db.quick_add_foods.toArray(),
     db.workout_sessions.toArray(),
     db.strength_entries.toArray(),
     db.run_entries.toArray(),
@@ -812,6 +778,7 @@ export async function exportBackupData(): Promise<BackupPayload> {
     exported_at: new Date().toISOString(),
     profiles,
     food_entries,
+    quick_add_foods,
     workout_sessions,
     strength_entries,
     run_entries,
@@ -826,57 +793,23 @@ export async function importBackupData(payload: BackupPayload) {
 
   await resetDatabase();
 
-  if (payload.profiles.length > 0) {
-    await db.profiles.bulkAdd(payload.profiles);
-  }
-
-  if (payload.food_entries.length > 0) {
-    await db.food_entries.bulkAdd(payload.food_entries);
-  }
-
-  if (payload.workout_sessions.length > 0) {
-    await db.workout_sessions.bulkAdd(payload.workout_sessions);
-  }
-
-  if (payload.strength_entries.length > 0) {
-    await db.strength_entries.bulkAdd(payload.strength_entries);
-  }
-
-  if (payload.run_entries.length > 0) {
-    await db.run_entries.bulkAdd(payload.run_entries);
-  }
-
-  if (payload.body_metrics.length > 0) {
-    await db.body_metrics.bulkAdd(payload.body_metrics);
-  }
+  if (payload.profiles.length > 0) await db.profiles.bulkAdd(payload.profiles);
+  if (payload.food_entries.length > 0) await db.food_entries.bulkAdd(payload.food_entries);
+  if (payload.quick_add_foods?.length > 0) await db.quick_add_foods.bulkAdd(payload.quick_add_foods);
+  if (payload.workout_sessions.length > 0) await db.workout_sessions.bulkAdd(payload.workout_sessions);
+  if (payload.strength_entries.length > 0) await db.strength_entries.bulkAdd(payload.strength_entries);
+  if (payload.run_entries.length > 0) await db.run_entries.bulkAdd(payload.run_entries);
+  if (payload.body_metrics.length > 0) await db.body_metrics.bulkAdd(payload.body_metrics);
 }
 
-export async function getDayBreakdown(
-  profileId: number,
-  date: string
-): Promise<DayBreakdown> {
+export async function getDayBreakdown(profileId: number, date: string): Promise<DayBreakdown> {
   const [foodRows, workoutRows, bodyRows] = await Promise.all([
-    db.food_entries
-      .where('[profile_id+entry_date]')
-      .equals([profileId, date] as [number, string])
-      .toArray(),
-
-    db.workout_sessions
-      .where('[profile_id+session_date]')
-      .equals([profileId, date] as [number, string])
-      .toArray(),
-
-    db.body_metrics
-      .where('profile_id')
-      .equals(profileId)
-      .filter((row) => row.entry_date === date)
-      .toArray(),
+    db.food_entries.where('[profile_id+entry_date]').equals([profileId, date] as [number, string]).toArray(),
+    db.workout_sessions.where('[profile_id+session_date]').equals([profileId, date] as [number, string]).toArray(),
+    db.body_metrics.where('profile_id').equals(profileId).filter((row) => row.entry_date === date).toArray(),
   ]);
 
-  const latestBodyMetric =
-    bodyRows.length > 0
-      ? [...bodyRows].sort((a, b) => b.id - a.id)[0]
-      : null;
+  const latestBodyMetric = bodyRows.length > 0 ? [...bodyRows].sort((a, b) => b.id - a.id)[0] : null;
 
   return {
     date,
@@ -885,31 +818,44 @@ export async function getDayBreakdown(
     hasBodyWeightEntry: bodyRows.length > 0,
     bodyWeight: latestBodyMetric ? latestBodyMetric.body_weight : null,
     totalCaloriesIn: foodRows.reduce((sum, row) => sum + row.calories, 0),
-    totalCaloriesOut: workoutRows.reduce(
-      (sum, row) => sum + (row.estimated_calories ?? 0),
-      0
-    ),
-    foods: foodRows
-      .slice()
-      .sort((a, b) => b.id - a.id)
-      .map((row) => ({
-        id: row.id,
-        name: row.food_name,
-        calories: row.calories,
-        protein: row.protein,
-        carbs: row.carbs,
-        fats: row.fats,
-        mealType: row.meal_type,
-      })),
-    workouts: workoutRows
-      .slice()
-      .sort((a, b) => (b.id ?? 0) - (a.id ?? 0))
-      .map((row) => ({
-        id: row.id!,
-        name: row.name,
-        workoutType: row.workout_type,
-        estimatedCalories: row.estimated_calories ?? 0,
-        durationMinutes: row.duration_minutes,
-      })),
+    totalCaloriesOut: workoutRows.reduce((sum, row) => sum + (row.estimated_calories ?? 0), 0),
+    foods: foodRows.slice().sort((a, b) => b.id - a.id).map((row) => ({
+      id: row.id, name: row.food_name, calories: row.calories, protein: row.protein, carbs: row.carbs, fats: row.fats, mealType: row.meal_type,
+    })),
+    workouts: workoutRows.slice().sort((a, b) => (b.id ?? 0) - (a.id ?? 0)).map((row) => ({
+      id: row.id!, name: row.name, workoutType: row.workout_type, estimatedCalories: row.estimated_calories ?? 0, durationMinutes: row.duration_minutes,
+    })),
+  };
+}
+
+export type AllTimeSummary = {
+  totalCaloriesIn: number;
+  totalCaloriesOut: number;
+  avgWeight: number | null;
+  firstLogDate: string | null;
+};
+
+export async function getAllTimeSummary(profileId: number): Promise<AllTimeSummary> {
+  const foodRows = await db.food_entries.where('profile_id').equals(profileId).toArray();
+  const workoutRows = await db.workout_sessions.where('profile_id').equals(profileId).toArray();
+  const weightRows = await db.body_metrics.where('profile_id').equals(profileId).toArray();
+
+  const totalCaloriesIn = foodRows.reduce((sum, r) => sum + (r.calories ?? 0), 0);
+  const totalCaloriesOut = workoutRows.reduce((sum, r) => sum + (r.estimated_calories ?? 0), 0);
+  const avgWeight = weightRows.length > 0 ? weightRows.reduce((sum, r) => sum + r.body_weight, 0) / weightRows.length : null;
+
+  const dates = [
+    ...foodRows.map((r) => r.entry_date),
+    ...workoutRows.map((r) => r.session_date),
+    ...weightRows.map((r) => r.entry_date),
+  ].filter(Boolean).sort();
+
+  const firstLogDate = dates.length > 0 ? dates[0] : null;
+
+  return {
+    totalCaloriesIn,
+    totalCaloriesOut,
+    avgWeight,
+    firstLogDate,
   };
 }

@@ -59,6 +59,19 @@ export async function initDatabase() {
       FOREIGN KEY (profile_id) REFERENCES profiles (id)
     );
 
+    CREATE TABLE IF NOT EXISTS quick_add_foods (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      profile_id INTEGER NOT NULL,
+      meal_type TEXT NOT NULL,
+      food_name TEXT NOT NULL,
+      calories REAL NOT NULL,
+      protein REAL NOT NULL,
+      carbs REAL NOT NULL,
+      fats REAL NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (profile_id) REFERENCES profiles (id)
+    );
+
     CREATE TABLE IF NOT EXISTS workout_sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       profile_id INTEGER NOT NULL,
@@ -88,6 +101,7 @@ export async function initDatabase() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (profile_id) REFERENCES profiles (id)
     );
+
     CREATE TABLE IF NOT EXISTS strength_entries (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         workout_session_id INTEGER NOT NULL UNIQUE,
@@ -108,41 +122,11 @@ export async function initDatabase() {
     );
   `);
 
-    await ensureColumnExists(
-    database,
-    'workout_sessions',
-    'workout_type',
-    'TEXT'
-  );
-
-  await ensureColumnExists(
-    database,
-    'workout_sessions',
-    'duration_minutes',
-    'INTEGER'
-  );
-
-  await ensureColumnExists(
-    database,
-    'workout_sessions',
-    'intensity',
-    'TEXT'
-  );
-
-  await ensureColumnExists(
-    database,
-    'workout_sessions',
-    'body_weight_kg',
-    'REAL'
-  );
-
-  await ensureColumnExists(
-    database,
-    'workout_sessions',
-    'estimated_calories',
-    'REAL'
-  );
-
+  await ensureColumnExists(database, 'workout_sessions', 'workout_type', 'TEXT');
+  await ensureColumnExists(database, 'workout_sessions', 'duration_minutes', 'INTEGER');
+  await ensureColumnExists(database, 'workout_sessions', 'intensity', 'TEXT');
+  await ensureColumnExists(database, 'workout_sessions', 'body_weight_kg', 'REAL');
+  await ensureColumnExists(database, 'workout_sessions', 'estimated_calories', 'REAL');
   await ensureColumnExists(database, 'profiles', 'age', 'INTEGER');
   await ensureColumnExists(database, 'profiles', 'sex', 'TEXT');
   await ensureColumnExists(database, 'profiles', 'height_cm', 'REAL');
@@ -191,6 +175,7 @@ export async function resetDatabase() {
     DELETE FROM strength_entries;
     DELETE FROM run_entries;
     DELETE FROM food_entries;
+    DELETE FROM quick_add_foods;
     DELETE FROM body_metrics;
     DELETE FROM workout_sessions;
     DELETE FROM profiles;
@@ -199,10 +184,7 @@ export async function resetDatabase() {
   console.log('Database reset complete');
 }
 
-export async function updateProfile(
-  profileId: number,
-  input: CreateProfileInput
-) {
+export async function updateProfile(profileId: number, input: CreateProfileInput) {
   const database = await getDatabase();
 
   await database.runAsync(
@@ -283,6 +265,28 @@ export type FoodEntryInput = {
   fats: number;
 };
 
+export type QuickAddFood = {
+  id: number;
+  profile_id: number;
+  meal_type: string;
+  food_name: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fats: number;
+  created_at: string;
+};
+
+export type QuickAddFoodInput = {
+  profileId: number;
+  mealType: string;
+  foodName: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fats: number;
+};
+
 export async function getDefaultProfile() {
   const database = await getDatabase();
 
@@ -343,11 +347,64 @@ export async function getFoodEntriesByDate(profileId: number, entryDate: string)
 
 export async function deleteFoodEntry(id: number) {
   const database = await getDatabase();
+  await database.runAsync(`DELETE FROM food_entries WHERE id = ?;`, [id]);
+}
+
+export async function addQuickAddFood(input: QuickAddFoodInput) {
+  const database = await getDatabase();
 
   await database.runAsync(
-    `DELETE FROM food_entries WHERE id = ?;`,
-    [id]
+    `INSERT INTO quick_add_foods
+      (profile_id, meal_type, food_name, calories, protein, carbs, fats)
+     VALUES (?, ?, ?, ?, ?, ?, ?);`,
+    [
+      input.profileId,
+      input.mealType,
+      input.foodName,
+      input.calories,
+      input.protein,
+      input.carbs,
+      input.fats,
+    ]
   );
+}
+
+export async function updateQuickAddFood(id: number, input: QuickAddFoodInput) {
+  const database = await getDatabase();
+
+  await database.runAsync(
+    `UPDATE quick_add_foods
+     SET meal_type = ?, food_name = ?, calories = ?, protein = ?, carbs = ?, fats = ?
+     WHERE id = ?;`,
+    [
+      input.mealType,
+      input.foodName,
+      input.calories,
+      input.protein,
+      input.carbs,
+      input.fats,
+      id,
+    ]
+  );
+}
+
+export async function getQuickAddFoods(profileId: number) {
+  const database = await getDatabase();
+
+  const entries = await database.getAllAsync<QuickAddFood>(
+    `SELECT *
+     FROM quick_add_foods
+     WHERE profile_id = ?
+     ORDER BY meal_type ASC, food_name ASC;`,
+    [profileId]
+  );
+
+  return entries;
+}
+
+export async function deleteQuickAddFood(id: number) {
+  const database = await getDatabase();
+  await database.runAsync(`DELETE FROM quick_add_foods WHERE id = ?;`, [id]);
 }
 
 export type WorkoutSession = {
@@ -416,10 +473,7 @@ export async function addWorkoutSession(input: WorkoutSessionInput) {
   return result.lastInsertRowId;
 }
 
-export async function getWorkoutSessionsByDate(
-  profileId: number,
-  sessionDate: string
-) {
+export async function getWorkoutSessionsByDate(profileId: number, sessionDate: string) {
   const database = await getDatabase();
 
   const sessions = await database.getAllAsync<WorkoutSession>(
@@ -446,20 +500,9 @@ export async function getWorkoutSessionsByDate(
 export async function deleteWorkoutSession(id: number) {
   const database = await getDatabase();
 
-  await database.runAsync(
-    `DELETE FROM strength_entries WHERE workout_session_id = ?;`,
-    [id]
-  );
-
-  await database.runAsync(
-    `DELETE FROM run_entries WHERE workout_session_id = ?;`,
-    [id]
-  );
-
-  await database.runAsync(
-    `DELETE FROM workout_sessions WHERE id = ?;`,
-    [id]
-  );
+  await database.runAsync(`DELETE FROM strength_entries WHERE workout_session_id = ?;`, [id]);
+  await database.runAsync(`DELETE FROM run_entries WHERE workout_session_id = ?;`, [id]);
+  await database.runAsync(`DELETE FROM workout_sessions WHERE id = ?;`, [id]);
 }
 
 export type BodyMetric = {
@@ -503,19 +546,13 @@ export async function getBodyMetrics(profileId: number) {
 
 export async function deleteBodyMetric(id: number) {
   const database = await getDatabase();
-
-  await database.runAsync(
-    `DELETE FROM body_metrics WHERE id = ?;`,
-    [id]
-  );
+  await database.runAsync(`DELETE FROM body_metrics WHERE id = ?;`, [id]);
 }
 
 export async function getLatestBodyWeight(profileId: number) {
   const database = await getDatabase();
 
-  const latest = await database.getFirstAsync<{
-    body_weight: number;
-  }>(
+  const latest = await database.getFirstAsync<{ body_weight: number }>(
     `SELECT body_weight
      FROM body_metrics
      WHERE profile_id = ?
@@ -641,11 +678,7 @@ export async function getRunPbs(profileId: number): Promise<RunPbSummary> {
   );
 
   if (rows.length === 0) {
-    return {
-      longestRun: null,
-      fastestPace: null,
-      fastest5k: null,
-    };
+    return { longestRun: null, fastestPace: null, fastest5k: null };
   }
 
   const mapped: RunPb[] = rows
@@ -657,30 +690,21 @@ export async function getRunPbs(profileId: number): Promise<RunPbSummary> {
       sessionDate: row.session_date,
     }));
 
-  const longestRun =
-    mapped.reduce((best, current) =>
-      !best || current.distanceKm > best.distanceKm ? current : best
-    , null as RunPb | null);
+  const longestRun = mapped.reduce((best, current) =>
+    !best || current.distanceKm > best.distanceKm ? current : best
+  , null as RunPb | null);
 
-  const fastestPace =
-    mapped.reduce((best, current) =>
-      !best || current.pacePerKm < best.pacePerKm ? current : best
-    , null as RunPb | null);
+  const fastestPace = mapped.reduce((best, current) =>
+    !best || current.pacePerKm < best.pacePerKm ? current : best
+  , null as RunPb | null);
 
-  const fiveKs = mapped.filter(
-    (run) => run.distanceKm >= 4.95 && run.distanceKm <= 5.05
-  );
+  const fiveKs = mapped.filter((run) => run.distanceKm >= 4.95 && run.distanceKm <= 5.05);
 
-  const fastest5k =
-    fiveKs.reduce((best, current) =>
-      !best || current.durationMinutes < best.durationMinutes ? current : best
-    , null as RunPb | null);
+  const fastest5k = fiveKs.reduce((best, current) =>
+    !best || current.durationMinutes < best.durationMinutes ? current : best
+  , null as RunPb | null);
 
-  return {
-    longestRun,
-    fastestPace,
-    fastest5k,
-  };
+  return { longestRun, fastestPace, fastest5k };
 }
 
 export async function getFoodSummaryByDate(profileId: number, entryDate: string) {
@@ -761,7 +785,7 @@ function formatDateKey(date: Date) {
 function getWeekStart(date: Date) {
   const copy = new Date(date);
   const day = copy.getDay();
-  const diff = day === 0 ? -6 : 1 - day; // Monday start
+  const diff = day === 0 ? -6 : 1 - day; 
   copy.setDate(copy.getDate() + diff);
   copy.setHours(0, 0, 0, 0);
   return copy;
@@ -779,117 +803,56 @@ function getMonthKey(date: Date) {
 
 function getDailyPeriods(days = 7) {
   const periods: { key: string; label: string; start: Date }[] = [];
-
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     d.setDate(d.getDate() - i);
-
-    periods.push({
-      key: formatDateKey(d),
-      label: `${d.getDate()}/${d.getMonth() + 1}`,
-      start: d,
-    });
+    periods.push({ key: formatDateKey(d), label: `${d.getDate()}/${d.getMonth() + 1}`, start: d });
   }
-
   return periods;
 }
 
 function getWeeklyPeriods(weeks = 8) {
   const periods: { key: string; label: string; start: Date }[] = [];
   const currentWeekStart = getWeekStart(new Date());
-
   for (let i = weeks - 1; i >= 0; i--) {
     const d = new Date(currentWeekStart);
     d.setDate(d.getDate() - i * 7);
-
-    periods.push({
-      key: formatDateKey(d),
-      label: `${d.getDate()}/${d.getMonth() + 1}`,
-      start: d,
-    });
+    periods.push({ key: formatDateKey(d), label: `${d.getDate()}/${d.getMonth() + 1}`, start: d });
   }
-
   return periods;
 }
 
 function getMonthlyPeriods(months = 6) {
   const periods: { key: string; label: string; start: Date }[] = [];
   const now = new Date();
-
   for (let i = months - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-
-    periods.push({
-      key: getMonthKey(d),
-      label: d.toLocaleString('en-US', { month: 'short' }),
-      start: d,
-    });
+    periods.push({ key: getMonthKey(d), label: d.toLocaleString('en-US', { month: 'short' }), start: d });
   }
-
   return periods;
 }
 
-export async function getAnalyticsSeries(
-  profileId: number,
-  mode: AnalyticsMode
-): Promise<AnalyticsPoint[]> {
+export async function getAnalyticsSeries(profileId: number, mode: AnalyticsMode): Promise<AnalyticsPoint[]> {
   const database = await getDatabase();
-
-  const periods =
-    mode === 'daily'
-      ? getDailyPeriods(7)
-      : mode === 'weekly'
-      ? getWeeklyPeriods(8)
-      : getMonthlyPeriods(6);
-
+  const periods = mode === 'daily' ? getDailyPeriods(7) : mode === 'weekly' ? getWeeklyPeriods(8) : getMonthlyPeriods(6);
   const startDate = formatDateKey(periods[0].start);
 
   const [foodRows, workoutRows, weightRows] = await Promise.all([
-    database.getAllAsync<{
-      entry_date: string;
-      calories: number;
-    }>(
-      `SELECT entry_date, calories
-       FROM food_entries
-       WHERE profile_id = ? AND entry_date >= ?;`,
-      [profileId, startDate]
+    database.getAllAsync<{ entry_date: string; calories: number; }>(
+      `SELECT entry_date, calories FROM food_entries WHERE profile_id = ? AND entry_date >= ?;`, [profileId, startDate]
     ),
-
-    database.getAllAsync<{
-      session_date: string;
-      estimated_calories: number | null;
-      id: number;
-    }>(
-      `SELECT id, session_date, estimated_calories
-       FROM workout_sessions
-       WHERE profile_id = ? AND session_date >= ?;`,
-      [profileId, startDate]
+    database.getAllAsync<{ session_date: string; estimated_calories: number | null; id: number; }>(
+      `SELECT id, session_date, estimated_calories FROM workout_sessions WHERE profile_id = ? AND session_date >= ?;`, [profileId, startDate]
     ),
-
-    database.getAllAsync<{
-      entry_date: string;
-      body_weight: number;
-    }>(
-      `SELECT entry_date, body_weight
-       FROM body_metrics
-       WHERE profile_id = ? AND entry_date >= ?;`,
-      [profileId, startDate]
+    database.getAllAsync<{ entry_date: string; body_weight: number; }>(
+      `SELECT entry_date, body_weight FROM body_metrics WHERE profile_id = ? AND entry_date >= ?;`, [profileId, startDate]
     ),
   ]);
 
   const map = new Map<string, AnalyticsPoint>();
-
   for (const period of periods) {
-    map.set(period.key, {
-      key: period.key,
-      label: period.label,
-      caloriesIn: 0,
-      caloriesOut: 0,
-      netCalories: 0,
-      workouts: 0,
-      avgWeight: null,
-    });
+    map.set(period.key, { key: period.key, label: period.label, caloriesIn: 0, caloriesOut: 0, netCalories: 0, workouts: 0, avgWeight: null });
   }
 
   function resolveKey(dateStr: string) {
@@ -915,45 +878,31 @@ export async function getAnalyticsSeries(
   }
 
   const weightBuckets = new Map<string, number[]>();
-
   for (const row of weightRows) {
     const key = resolveKey(row.entry_date);
-    if (!weightBuckets.has(key)) {
-      weightBuckets.set(key, []);
-    }
+    if (!weightBuckets.has(key)) weightBuckets.set(key, []);
     weightBuckets.get(key)!.push(row.body_weight);
   }
 
   for (const [key, weights] of weightBuckets.entries()) {
     const point = map.get(key);
     if (point && weights.length > 0) {
-      point.avgWeight =
-        weights.reduce((sum, value) => sum + value, 0) / weights.length;
+      point.avgWeight = weights.reduce((sum, value) => sum + value, 0) / weights.length;
     }
   }
 
-  const result = Array.from(map.values()).map((point) => ({
+  return Array.from(map.values()).map((point) => ({
     ...point,
     netCalories: point.caloriesIn - point.caloriesOut,
   }));
-
-  return result;
 }
 
-export function calculateRollingAverage(
-  values: (number | null)[],
-  windowSize = 7
-) {
+export function calculateRollingAverage(values: (number | null)[], windowSize = 7) {
   return values.map((_, index) => {
     const start = Math.max(0, index - windowSize + 1);
-    const slice = values.slice(start, index + 1).filter(
-      (value): value is number => value !== null
-    );
-
+    const slice = values.slice(start, index + 1).filter((value): value is number => value !== null);
     if (slice.length === 0) return null;
-
-    const avg = slice.reduce((sum, value) => sum + value, 0) / slice.length;
-    return avg;
+    return slice.reduce((sum, value) => sum + value, 0) / slice.length;
   });
 }
 
@@ -967,6 +916,7 @@ export type BackupPayload = {
   exported_at: string;
   profiles: any[];
   food_entries: any[];
+  quick_add_foods: any[];
   workout_sessions: any[];
   strength_entries: any[];
   run_entries: any[];
@@ -1011,10 +961,7 @@ export type DayBreakdown = {
   }[];
 };
 
-export async function getDayBreakdown(
-  _profileId: number,
-  date: string
-): Promise<DayBreakdown> {
+export async function getDayBreakdown(_profileId: number, date: string): Promise<DayBreakdown> {
   return {
     date,
     foodEntryCount: 0,
@@ -1025,5 +972,38 @@ export async function getDayBreakdown(
     totalCaloriesOut: 0,
     foods: [],
     workouts: [],
+  };
+}
+
+export type AllTimeSummary = {
+  totalCaloriesIn: number;
+  totalCaloriesOut: number;
+  avgWeight: number | null;
+  firstLogDate: string | null;
+};
+
+export async function getAllTimeSummary(profileId: number): Promise<AllTimeSummary> {
+  const database = await getDatabase();
+
+  const [foodRes, workoutRes, weightRes, firstDateRes] = await Promise.all([
+    database.getFirstAsync<{ total: number | null }>(`SELECT SUM(calories) as total FROM food_entries WHERE profile_id = ?;`, [profileId]),
+    database.getFirstAsync<{ total: number | null }>(`SELECT SUM(estimated_calories) as total FROM workout_sessions WHERE profile_id = ?;`, [profileId]),
+    database.getFirstAsync<{ avg: number | null }>(`SELECT AVG(body_weight) as avg FROM body_metrics WHERE profile_id = ?;`, [profileId]),
+    database.getFirstAsync<{ firstDate: string | null }>(`
+      SELECT MIN(date) as firstDate FROM (
+        SELECT entry_date AS date FROM food_entries WHERE profile_id = ?
+        UNION
+        SELECT session_date AS date FROM workout_sessions WHERE profile_id = ?
+        UNION
+        SELECT entry_date AS date FROM body_metrics WHERE profile_id = ?
+      );
+    `, [profileId, profileId, profileId])
+  ]);
+
+  return {
+    totalCaloriesIn: foodRes?.total ?? 0,
+    totalCaloriesOut: workoutRes?.total ?? 0,
+    avgWeight: weightRes?.avg ?? null,
+    firstLogDate: firstDateRes?.firstDate ?? null,
   };
 }

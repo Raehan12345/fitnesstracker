@@ -2,12 +2,14 @@ import { create } from 'zustand';
 import {
   addBodyMetric,
   addFoodEntry,
+  addQuickAddFood,
   addRunEntry,
   addStrengthEntry,
   addWorkoutSession,
   BodyMetric,
   deleteBodyMetric,
   deleteFoodEntry,
+  deleteQuickAddFood,
   deleteWorkoutSession,
   FoodEntry,
   getBodyMetrics,
@@ -15,14 +17,18 @@ import {
   getFoodEntriesByDate,
   getFoodSummaryByDate,
   getLatestBodyWeight,
+  getQuickAddFoods,
   getRunPbs,
   getStrengthPbs,
   getWorkoutSessionsByDate,
   getWorkoutSummaryByDate,
   Profile,
+  QuickAddFood,
+  QuickAddFoodInput,
   resetDatabase,
   RunPbSummary,
   StrengthPb,
+  updateQuickAddFood,
   WorkoutSession,
 } from '../db/database';
 
@@ -99,6 +105,7 @@ type AppStore = {
   workoutSummary: WorkoutSummary;
 
   foodEntriesToday: FoodEntry[];
+  quickAddFoods: QuickAddFood[];
   workoutSessionsToday: WorkoutSession[];
   bodyMetrics: BodyMetric[];
 
@@ -113,12 +120,16 @@ type AppStore = {
   initializeAppData: () => Promise<void>;
   refreshAll: () => Promise<void>;
   refreshFood: () => Promise<void>;
+  refreshQuickAdd: () => Promise<void>;
   refreshWorkout: () => Promise<void>;
   refreshProgress: () => Promise<void>;
   refreshHomeSummary: () => Promise<void>;
 
   addFoodAndRefresh: (input: AddFoodInput) => Promise<void>;
   deleteFoodAndRefresh: (id: number) => Promise<void>;
+
+  saveQuickAddFoodAndRefresh: (id: number | null, input: QuickAddFoodInput) => Promise<void>;
+  deleteQuickAddFoodAndRefresh: (id: number) => Promise<void>;
 
   addWorkoutAndRefresh: (input: AddWorkoutInput) => Promise<void>;
   deleteWorkoutAndRefresh: (id: number) => Promise<void>;
@@ -145,6 +156,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   foodEntriesToday: [],
+  quickAddFoods: [],
   workoutSessionsToday: [],
   bodyMetrics: [],
 
@@ -169,6 +181,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
           profile: null,
           latestWeight: null,
           foodEntriesToday: [],
+          quickAddFoods: [],
           workoutSessionsToday: [],
           bodyMetrics: [],
           strengthPbs: [],
@@ -187,6 +200,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         foodSummary,
         workoutSummary,
         foodEntriesToday,
+        quickAddFoods,
         workoutSessionsToday,
         bodyMetrics,
         strengthPbs,
@@ -196,6 +210,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         getFoodSummaryByDate(profile.id, today),
         getWorkoutSummaryByDate(profile.id, today),
         getFoodEntriesByDate(profile.id, today),
+        getQuickAddFoods(profile.id),
         getWorkoutSessionsByDate(profile.id, today),
         getBodyMetrics(profile.id),
         getStrengthPbs(profile.id),
@@ -208,6 +223,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         foodSummary,
         workoutSummary,
         foodEntriesToday,
+        quickAddFoods,
         workoutSessionsToday,
         bodyMetrics,
         strengthPbs,
@@ -236,6 +252,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
       foodSummary,
       foodEntriesToday,
     });
+  },
+
+  refreshQuickAdd: async () => {
+    const { profile } = get();
+    if (!profile) return;
+
+    const quickAddFoods = await getQuickAddFoods(profile.id);
+    set({ quickAddFoods });
   },
 
   refreshWorkout: async () => {
@@ -317,6 +341,20 @@ export const useAppStore = create<AppStore>((set, get) => ({
       get().refreshFood(),
       get().refreshHomeSummary(),
     ]);
+  },
+
+  saveQuickAddFoodAndRefresh: async (id, input) => {
+    if (id) {
+      await updateQuickAddFood(id, input);
+    } else {
+      await addQuickAddFood(input);
+    }
+    await get().refreshQuickAdd();
+  },
+
+  deleteQuickAddFoodAndRefresh: async (id) => {
+    await deleteQuickAddFood(id);
+    await get().refreshQuickAdd();
   },
 
   addWorkoutAndRefresh: async (input) => {
@@ -406,6 +444,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         totalCaloriesBurned: 0,
       },
       foodEntriesToday: [],
+      quickAddFoods: [],
       workoutSessionsToday: [],
       bodyMetrics: [],
       strengthPbs: [],
@@ -419,4 +458,3 @@ export const useAppStore = create<AppStore>((set, get) => ({
     });
   },
 }));
-

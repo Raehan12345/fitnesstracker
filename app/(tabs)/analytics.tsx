@@ -13,7 +13,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableWithoutFeedback,
   View,
   useColorScheme,
 } from 'react-native';
@@ -25,16 +24,19 @@ import Svg, {
 } from 'react-native-svg';
 import { Colors } from '../../constants/theme';
 import {
+  AllTimeSummary,
   AnalyticsMode,
   AnalyticsPoint,
   calculateRollingAverage,
   DayBreakdown,
+  getAllTimeSummary,
   getAnalyticsSeries,
   getDayBreakdown,
   getFoodEntriesByDate,
   getHeatmapData,
   getWorkoutSessionsByDate,
   HeatmapCell,
+  QuickAddFood,
 } from '../../src/db/database';
 import { useAppStore } from '../../src/store/useAppStore';
 
@@ -365,6 +367,11 @@ function Heatmap({
   const deleteWorkoutAndRefresh = useAppStore((state) => state.deleteWorkoutAndRefresh);
   const addBodyMetricAndRefresh = useAppStore((state) => state.addBodyMetricAndRefresh);
   const deleteBodyMetricAndRefresh = useAppStore((state) => state.deleteBodyMetricAndRefresh);
+  
+  const quickAddFoods = useAppStore((state) => state.quickAddFoods);
+  const saveQuickAddFoodAndRefresh = useAppStore((state) => state.saveQuickAddFoodAndRefresh);
+  const deleteQuickAddFoodAndRefresh = useAppStore((state) => state.deleteQuickAddFoodAndRefresh);
+
   const bodyMetrics = useAppStore((state) => state.bodyMetrics);
   const latestWeight = useAppStore((state) => state.latestWeight);
 
@@ -372,6 +379,8 @@ function Heatmap({
   const [foodModalVisible, setFoodModalVisible] = useState(false);
   const [workoutModalVisible, setWorkoutModalVisible] = useState(false);
   const [weightModalVisible, setWeightModalVisible] = useState(false);
+  const [quickAddPageVisible, setQuickAddPageVisible] = useState(false);
+  const [quickAddFormVisible, setQuickAddFormVisible] = useState(false);
 
   // food form states
   const [foodName, setFoodName] = useState('');
@@ -381,6 +390,9 @@ function Heatmap({
   const [carbs, setCarbs] = useState('');
   const [fats, setFats] = useState('');
   const [editingFoodId, setEditingFoodId] = useState<number | null>(null);
+
+  // quick add form specific states
+  const [editingQuickAddId, setEditingQuickAddId] = useState<number | null>(null);
 
   // workout form states
   const [workoutName, setWorkoutName] = useState('');
@@ -403,6 +415,17 @@ function Heatmap({
   const countsMap = useMemo(() => {
     return new Map(data.map((item) => [item.date, item.count]));
   }, [data]);
+
+  const quickAddGroups = useMemo(() => {
+    const groups: Record<string, QuickAddFood[]> = {};
+    for (const item of quickAddFoods) {
+      if (!groups[item.meal_type]) {
+        groups[item.meal_type] = [];
+      }
+      groups[item.meal_type].push(item);
+    }
+    return groups;
+  }, [quickAddFoods]);
 
   function parseDateKey(dateStr: string) {
     const [year, month, day] = dateStr.split('-').map(Number);
@@ -535,9 +558,8 @@ function Heatmap({
     await refreshSelectedDay(cell.date);
   }
 
-  // modal openers
-
-  const openFoodModal = () => {
+  // reset helpers
+  function resetFoodForm() {
     setEditingFoodId(null);
     setFoodName('');
     setMealType('');
@@ -545,6 +567,12 @@ function Heatmap({
     setProtein('');
     setCarbs('');
     setFats('');
+  }
+
+  // modal openers
+
+  const openFoodModal = () => {
+    resetFoodForm();
     setFoodModalVisible(true);
   };
 
@@ -608,6 +636,88 @@ function Heatmap({
     setBodyWeight(String(currentWeight));
     setWeightModalVisible(true);
   };
+
+  // quick add handlers
+
+  function handleOpenQuickAddEditor(item?: QuickAddFood) {
+    if (item) {
+      setEditingQuickAddId(item.id);
+      setFoodName(item.food_name);
+      setMealType(item.meal_type);
+      setCalories(String(item.calories));
+      setProtein(String(item.protein));
+      setCarbs(String(item.carbs));
+      setFats(String(item.fats));
+    } else {
+      resetFoodForm();
+      setEditingQuickAddId(null);
+    }
+    setQuickAddFormVisible(true);
+  }
+
+  async function handleSaveQuickAdd() {
+    if (!profileId) return;
+
+    if (!foodName.trim()) { Alert.alert('Missing food name', 'Please enter a food name.'); return; }
+    if (!mealType) { Alert.alert('Missing meal type', 'Please select a meal type.'); return; }
+
+    const parsedCalories = Number(calories);
+    const parsedProtein = Number(protein);
+    const parsedCarbs = Number(carbs);
+    const parsedFats = Number(fats);
+
+    if (
+      Number.isNaN(parsedCalories) ||
+      Number.isNaN(parsedProtein) ||
+      Number.isNaN(parsedCarbs) ||
+      Number.isNaN(parsedFats)
+    ) {
+      Alert.alert('Invalid input', 'Please enter valid numbers for all macros.');
+      return;
+    }
+
+    await saveQuickAddFoodAndRefresh(editingQuickAddId, {
+      profileId,
+      mealType,
+      foodName: foodName.trim(),
+      calories: parsedCalories,
+      protein: parsedProtein,
+      carbs: parsedCarbs,
+      fats: parsedFats,
+    });
+
+    Keyboard.dismiss();
+    setQuickAddFormVisible(false);
+  }
+
+  function handleDeleteQuickAdd(id: number) {
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm('Delete this saved item?');
+      if (confirmed) deleteQuickAddFoodAndRefresh(id);
+      return;
+    }
+    Alert.alert('Delete saved item', 'Are you sure you want to delete this template?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => deleteQuickAddFoodAndRefresh(id),
+      },
+    ]);
+  }
+
+  function handleSelectQuickAdd(item: QuickAddFood) {
+    resetFoodForm();
+    setFoodName(item.food_name);
+    setMealType(item.meal_type);
+    setCalories(String(item.calories));
+    setProtein(String(item.protein));
+    setCarbs(String(item.carbs));
+    setFats(String(item.fats));
+    
+    setQuickAddPageVisible(false);
+    setFoodModalVisible(true);
+  }
 
   // delete functions
 
@@ -1010,6 +1120,7 @@ function Heatmap({
           <View style={styles.actionRow}>
             <Pressable style={styles.actionAddButton} onPress={openWeightModal}><Text style={styles.actionAddButtonText}>+ Weight</Text></Pressable>
             <Pressable style={styles.actionAddButton} onPress={openFoodModal}><Text style={styles.actionAddButtonText}>+ Food</Text></Pressable>
+            <Pressable style={styles.actionAddButton} onPress={() => setQuickAddPageVisible(true)}><Text style={styles.actionAddButtonText}>+ Quick Add</Text></Pressable>
             <Pressable style={styles.actionAddButton} onPress={openWorkoutModal}><Text style={styles.actionAddButtonText}>+ Workout</Text></Pressable>
           </View>
 
@@ -1108,129 +1219,212 @@ function Heatmap({
 
       {/* food modal */}
       <Modal visible={foodModalVisible} animationType="slide" transparent>
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback>
-              <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalCard}>
-                <Text style={styles.modalTitle}>{editingFoodId ? 'Edit Food Entry' : 'Add Food Entry'}</Text>
-                <TextInput placeholder="Food name" placeholderTextColor={theme.textMuted} value={foodName} onChangeText={setFoodName} style={styles.input} />
-                <View style={styles.pickerContainer}>
-                  <Picker selectedValue={mealType} onValueChange={(itemValue) => setMealType(itemValue)} style={styles.picker} itemStyle={styles.pickerItem}>
-                    <Picker.Item label="Select meal type..." value="" color={theme.textMuted} />
-                    <Picker.Item label="Breakfast" value="Breakfast" color={theme.text} />
-                    <Picker.Item label="Lunch" value="Lunch" color={theme.text} />
-                    <Picker.Item label="Dinner" value="Dinner" color={theme.text} />
-                    <Picker.Item label="Supper" value="Supper" color={theme.text} />
-                    <Picker.Item label="Drink" value="Drink" color={theme.text} />
-                    <Picker.Item label="Snack" value="Snack" color={theme.text} />
-                  </Picker>
-                </View>
-                <TextInput placeholder="Calories" placeholderTextColor={theme.textMuted} value={calories} onChangeText={setCalories} keyboardType="decimal-pad" style={styles.input} />
-                <TextInput placeholder="Protein (g)" placeholderTextColor={theme.textMuted} value={protein} onChangeText={setProtein} keyboardType="decimal-pad" style={styles.input} />
-                <TextInput placeholder="Carbs (g)" placeholderTextColor={theme.textMuted} value={carbs} onChangeText={setCarbs} keyboardType="decimal-pad" style={styles.input} />
-                <TextInput placeholder="Fats (g)" placeholderTextColor={theme.textMuted} value={fats} onChangeText={setFats} keyboardType="decimal-pad" style={styles.input} />
-                <View style={styles.modalActions}>
-                  <Pressable style={[styles.actionButton, styles.cancelButton]} onPress={() => { Keyboard.dismiss(); setFoodModalVisible(false); }}>
-                    <Text style={styles.cancelButtonText}>Cancel</Text>
-                  </Pressable>
-                  <Pressable style={[styles.actionButton, styles.saveButton]} onPress={handleSaveFood}>
-                    <Text style={styles.saveButtonText}>Save</Text>
-                  </Pressable>
-                </View>
-              </KeyboardAvoidingView>
-            </TouchableWithoutFeedback>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+          <Pressable style={{ flex: 1 }} onPress={Keyboard.dismiss} />
+          <View style={styles.modalCard}>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalTitle}>{editingFoodId ? 'Edit Food Entry' : 'Add Food Entry'}</Text>
+              <TextInput placeholder="Food name" placeholderTextColor={theme.textMuted} value={foodName} onChangeText={setFoodName} style={styles.input} />
+              <View style={styles.pickerContainer}>
+                <Picker selectedValue={mealType} onValueChange={(itemValue) => setMealType(itemValue)} style={styles.picker} itemStyle={styles.pickerItem}>
+                  <Picker.Item label="Select meal type..." value="" color={theme.textMuted} />
+                  <Picker.Item label="Breakfast" value="Breakfast" color={theme.text} />
+                  <Picker.Item label="Lunch" value="Lunch" color={theme.text} />
+                  <Picker.Item label="Dinner" value="Dinner" color={theme.text} />
+                  <Picker.Item label="Supper" value="Supper" color={theme.text} />
+                  <Picker.Item label="Drink" value="Drink" color={theme.text} />
+                  <Picker.Item label="Snack" value="Snack" color={theme.text} />
+                </Picker>
+              </View>
+              <TextInput placeholder="Calories" placeholderTextColor={theme.textMuted} value={calories} onChangeText={setCalories} keyboardType="decimal-pad" style={styles.input} />
+              <TextInput placeholder="Protein (g)" placeholderTextColor={theme.textMuted} value={protein} onChangeText={setProtein} keyboardType="decimal-pad" style={styles.input} />
+              <TextInput placeholder="Carbs (g)" placeholderTextColor={theme.textMuted} value={carbs} onChangeText={setCarbs} keyboardType="decimal-pad" style={styles.input} />
+              <TextInput placeholder="Fats (g)" placeholderTextColor={theme.textMuted} value={fats} onChangeText={setFats} keyboardType="decimal-pad" style={styles.input} />
+              <View style={styles.modalActions}>
+                <Pressable style={[styles.actionButton, styles.cancelButton]} onPress={() => { Keyboard.dismiss(); setFoodModalVisible(false); }}>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </Pressable>
+                <Pressable style={[styles.actionButton, styles.saveButton]} onPress={handleSaveFood}>
+                  <Text style={styles.saveButtonText}>Save</Text>
+                </Pressable>
+              </View>
+            </ScrollView>
           </View>
-        </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* workout modal */}
       <Modal visible={workoutModalVisible} animationType="slide" transparent>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={styles.modalOverlay}
-          >
-            {/* Flex 1 backdrop pushes the card to the bottom and catches outside taps */}
-            <Pressable style={{ flex: 1 }} onPress={Keyboard.dismiss} />
-
-            <View style={styles.modalCard}>
-              <ScrollView
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-              >
-                    <Text style={styles.modalTitle}>{editingWorkoutId ? 'Edit Workout Session' : 'Add Workout Session'}</Text>
-                    <TextInput placeholder="Workout name" placeholderTextColor={theme.textMuted} value={workoutName} onChangeText={setWorkoutName} style={styles.input} />
-                    <View style={styles.pickerContainer}>
-                      <Picker selectedValue={workoutType} onValueChange={(itemValue) => { setWorkoutType(itemValue); setIntensity(''); }} style={styles.picker} itemStyle={styles.pickerItem}>
-                        <Picker.Item label="Select workout type..." value="" color={theme.textMuted} />
-                        <Picker.Item label="Walking" value="Walking" color={theme.text} />
-                        <Picker.Item label="Running" value="Running" color={theme.text} />
-                        <Picker.Item label="Cycling" value="Cycling" color={theme.text} />
-                        <Picker.Item label="Strength Training" value="Strength Training" color={theme.text} />
-                        <Picker.Item label="HIIT" value="HIIT" color={theme.text} />
-                        <Picker.Item label="Sports" value="Sports" color={theme.text} />
-                        <Picker.Item label="Other" value="Other" color={theme.text} />
-                      </Picker>
-                    </View>
-                    <TextInput placeholder="Duration (minutes)" placeholderTextColor={theme.textMuted} value={durationMinutes} onChangeText={setDurationMinutes} keyboardType="decimal-pad" style={styles.input} />
-                    {workoutType !== '' ? (
-                      <View style={styles.pickerContainer}>
-                        <Picker selectedValue={intensity} onValueChange={(itemValue) => setIntensity(itemValue)} style={styles.picker} itemStyle={styles.pickerItem}>
-                          <Picker.Item label="Select specification..." value="" color={theme.textMuted} />
-                          {getIntensityOptions(workoutType).map((option) => (
-                            <Picker.Item key={option} label={option} value={option} color={theme.text} />
-                          ))}
-                        </Picker>
-                      </View>
-                    ) : null}
-                    {workoutType === 'Strength Training' ? (
-                      <>
-                        <TextInput placeholder="Exercise name" placeholderTextColor={theme.textMuted} value={exerciseName} onChangeText={setExerciseName} style={styles.input} />
-                        <TextInput placeholder="Weight lifted (kg)" placeholderTextColor={theme.textMuted} value={weightKg} onChangeText={setWeightKg} keyboardType="decimal-pad" style={styles.input} />
-                        <TextInput placeholder="Reps" placeholderTextColor={theme.textMuted} value={reps} onChangeText={setReps} keyboardType="numeric" style={styles.input} />
-                      </>
-                    ) : null}
-                    {workoutType === 'Running' ? (
-                      <TextInput placeholder="Distance (km)" placeholderTextColor={theme.textMuted} value={distanceKm} onChangeText={setDistanceKm} keyboardType="decimal-pad" style={styles.input} />
-                    ) : null}
-                    <View style={styles.calorieCard}>
-                      <Text style={styles.calorieCardLabel}>Estimated calories burned</Text>
-                      <Text style={styles.calorieCardValue}>{estimatedCaloriesWorkout > 0 ? `${estimatedCaloriesWorkout.toFixed(0)} kcal` : 'N/A'}</Text>
-                      <Text style={styles.calorieCardHint}>{latestWeight !== null ? `Using latest body weight: ${latestWeight.toFixed(1)} kg` : 'Add a body-weight entry to enable calorie estimates'}</Text>
-                    </View>
-                    <TextInput placeholder="Notes (optional)" placeholderTextColor={theme.textMuted} value={notes} onChangeText={setNotes} style={[styles.input, styles.notesInput]} multiline />
-                    <View style={styles.modalActions}>
-                      <Pressable style={[styles.actionButton, styles.cancelButton]} onPress={() => { Keyboard.dismiss(); setWorkoutModalVisible(false); }}>
-                        <Text style={styles.cancelButtonText}>Cancel</Text>
-                      </Pressable>
-                      <Pressable style={[styles.actionButton, styles.saveButton]} onPress={handleSaveWorkout}>
-                        <Text style={styles.saveButtonText}>Save</Text>
-                      </Pressable>
-                    </View>
-                  </ScrollView>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+          <Pressable style={{ flex: 1 }} onPress={Keyboard.dismiss} />
+          <View style={styles.modalCard}>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalTitle}>{editingWorkoutId ? 'Edit Workout Session' : 'Add Workout Session'}</Text>
+              <TextInput placeholder="Workout name" placeholderTextColor={theme.textMuted} value={workoutName} onChangeText={setWorkoutName} style={styles.input} />
+              <View style={styles.pickerContainer}>
+                <Picker selectedValue={workoutType} onValueChange={(itemValue) => { setWorkoutType(itemValue); setIntensity(''); }} style={styles.picker} itemStyle={styles.pickerItem}>
+                  <Picker.Item label="Select workout type..." value="" color={theme.textMuted} />
+                  <Picker.Item label="Walking" value="Walking" color={theme.text} />
+                  <Picker.Item label="Running" value="Running" color={theme.text} />
+                  <Picker.Item label="Cycling" value="Cycling" color={theme.text} />
+                  <Picker.Item label="Strength Training" value="Strength Training" color={theme.text} />
+                  <Picker.Item label="HIIT" value="HIIT" color={theme.text} />
+                  <Picker.Item label="Sports" value="Sports" color={theme.text} />
+                  <Picker.Item label="Other" value="Other" color={theme.text} />
+                </Picker>
+              </View>
+              <TextInput placeholder="Duration (minutes)" placeholderTextColor={theme.textMuted} value={durationMinutes} onChangeText={setDurationMinutes} keyboardType="decimal-pad" style={styles.input} />
+              {workoutType !== '' ? (
+                <View style={styles.pickerContainer}>
+                  <Picker selectedValue={intensity} onValueChange={(itemValue) => setIntensity(itemValue)} style={styles.picker} itemStyle={styles.pickerItem}>
+                    <Picker.Item label="Select specification..." value="" color={theme.textMuted} />
+                    {getIntensityOptions(workoutType).map((option) => (
+                      <Picker.Item key={option} label={option} value={option} color={theme.text} />
+                    ))}
+                  </Picker>
                 </View>
-              </KeyboardAvoidingView>
+              ) : null}
+              {workoutType === 'Strength Training' ? (
+                <>
+                  <TextInput placeholder="Exercise name" placeholderTextColor={theme.textMuted} value={exerciseName} onChangeText={setExerciseName} style={styles.input} />
+                  <TextInput placeholder="Weight lifted (kg)" placeholderTextColor={theme.textMuted} value={weightKg} onChangeText={setWeightKg} keyboardType="decimal-pad" style={styles.input} />
+                  <TextInput placeholder="Reps" placeholderTextColor={theme.textMuted} value={reps} onChangeText={setReps} keyboardType="numeric" style={styles.input} />
+                </>
+              ) : null}
+              {workoutType === 'Running' ? (
+                <TextInput placeholder="Distance (km)" placeholderTextColor={theme.textMuted} value={distanceKm} onChangeText={setDistanceKm} keyboardType="decimal-pad" style={styles.input} />
+              ) : null}
+              <View style={styles.calorieCard}>
+                <Text style={styles.calorieCardLabel}>Estimated calories burned</Text>
+                <Text style={styles.calorieCardValue}>{estimatedCaloriesWorkout > 0 ? `${estimatedCaloriesWorkout.toFixed(0)} kcal` : 'N/A'}</Text>
+                <Text style={styles.calorieCardHint}>{latestWeight !== null ? `Using latest body weight: ${latestWeight.toFixed(1)} kg` : 'Add a body-weight entry to enable calorie estimates'}</Text>
+              </View>
+              <TextInput placeholder="Notes (optional)" placeholderTextColor={theme.textMuted} value={notes} onChangeText={setNotes} style={[styles.input, styles.notesInput]} multiline />
+              <View style={styles.modalActions}>
+                <Pressable style={[styles.actionButton, styles.cancelButton]} onPress={() => { Keyboard.dismiss(); setWorkoutModalVisible(false); }}>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </Pressable>
+                <Pressable style={[styles.actionButton, styles.saveButton]} onPress={handleSaveWorkout}>
+                  <Text style={styles.saveButtonText}>Save</Text>
+                </Pressable>
+              </View>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* weight modal */}
       <Modal visible={weightModalVisible} animationType="slide" transparent>
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback>
-              <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalCard}>
-                <Text style={styles.modalTitle}>{editingWeightId ? 'Edit Weight Entry' : 'Add Weight Entry'}</Text>
-                <TextInput placeholder="Body weight (kg)" placeholderTextColor={theme.textMuted} value={bodyWeight} onChangeText={setBodyWeight} keyboardType="decimal-pad" style={styles.input} />
-                <View style={styles.modalActions}>
-                  <Pressable style={[styles.actionButton, styles.cancelButton]} onPress={() => { Keyboard.dismiss(); setWeightModalVisible(false); }}>
-                    <Text style={styles.cancelButtonText}>Cancel</Text>
-                  </Pressable>
-                  <Pressable style={[styles.actionButton, styles.saveButton]} onPress={handleSaveWeight}>
-                    <Text style={styles.saveButtonText}>Save</Text>
-                  </Pressable>
-                </View>
-              </KeyboardAvoidingView>
-            </TouchableWithoutFeedback>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+          <Pressable style={{ flex: 1 }} onPress={Keyboard.dismiss} />
+          <View style={styles.modalCard}>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalTitle}>{editingWeightId ? 'Edit Weight Entry' : 'Add Weight Entry'}</Text>
+              <TextInput placeholder="Body weight (kg)" placeholderTextColor={theme.textMuted} value={bodyWeight} onChangeText={setBodyWeight} keyboardType="decimal-pad" style={styles.input} />
+              <View style={styles.modalActions}>
+                <Pressable style={[styles.actionButton, styles.cancelButton]} onPress={() => { Keyboard.dismiss(); setWeightModalVisible(false); }}>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </Pressable>
+                <Pressable style={[styles.actionButton, styles.saveButton]} onPress={handleSaveWeight}>
+                  <Text style={styles.saveButtonText}>Save</Text>
+                </Pressable>
+              </View>
+            </ScrollView>
           </View>
-        </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* full screen quick add modal */}
+      <Modal visible={quickAddPageVisible} animationType="slide" transparent={false}>
+        <View style={styles.quickAddContainer}>
+          <View style={styles.quickAddHeader}>
+            <Text style={styles.quickAddTitle}>Quick Add</Text>
+            <Pressable onPress={() => setQuickAddPageVisible(false)} style={styles.closeButton}>
+              <Text style={styles.closeButtonText}>Close</Text>
+            </Pressable>
+          </View>
+
+          <ScrollView style={styles.quickAddScroll} contentContainerStyle={styles.quickAddScrollContent} showsVerticalScrollIndicator={false}>
+            <Pressable style={styles.createTemplateButton} onPress={() => handleOpenQuickAddEditor()}>
+              <Text style={styles.createTemplateButtonText}>+ Create New Template</Text>
+            </Pressable>
+
+            {Object.keys(quickAddGroups).length === 0 ? (
+              <Text style={styles.emptyText}>No saved items yet. Create a template to easily add frequent meals.</Text>
+            ) : (
+              Object.keys(quickAddGroups).map((groupType) => (
+                <View key={groupType} style={styles.quickAddGroup}>
+                  <Text style={styles.quickAddGroupTitle}>{groupType}</Text>
+                  {quickAddGroups[groupType].map((item) => (
+                    <View key={item.id} style={styles.quickAddCard}>
+                      <View style={styles.quickAddCardRow}>
+                        <View style={styles.quickAddCardContent}>
+                          <Text style={styles.quickAddCardTitle}>{item.food_name}</Text>
+                          <Text style={styles.quickAddCardMacros}>
+                            {item.calories} kcal | P {item.protein} | C {item.carbs} | F {item.fats}
+                          </Text>
+                        </View>
+                        <Pressable style={styles.quickAddPlusButton} onPress={() => handleSelectQuickAdd(item)}>
+                          <Text style={styles.quickAddPlusText}>+</Text>
+                        </Pressable>
+                      </View>
+                      <View style={styles.actionRowCard}>
+                        <Pressable style={styles.editButton} onPress={() => handleOpenQuickAddEditor(item)}>
+                          <Text style={styles.editButtonText}>Edit</Text>
+                        </Pressable>
+                        <Pressable style={styles.deleteButton} onPress={() => handleDeleteQuickAdd(item.id)}>
+                          <Text style={styles.deleteButtonText}>Delete</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ))
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* quick add template creation modal */}
+      <Modal visible={quickAddFormVisible} animationType="fade" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+          <Pressable style={{ flex: 1 }} onPress={Keyboard.dismiss} />
+          <View style={styles.modalCard}>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalTitle}>
+                {editingQuickAddId ? 'Edit Template' : 'Save New Template'}
+              </Text>
+
+              <TextInput placeholder="Food name" placeholderTextColor={theme.textMuted} value={foodName} onChangeText={setFoodName} style={styles.input} />
+
+              <View style={styles.pickerContainer}>
+                <Picker selectedValue={mealType} onValueChange={(itemValue) => setMealType(itemValue)} style={styles.picker} itemStyle={styles.pickerItem}>
+                  <Picker.Item label="Select meal type..." value="" color={theme.textMuted} />
+                  <Picker.Item label="Breakfast" value="Breakfast" color={theme.text} />
+                  <Picker.Item label="Lunch" value="Lunch" color={theme.text} />
+                  <Picker.Item label="Dinner" value="Dinner" color={theme.text} />
+                  <Picker.Item label="Supper" value="Supper" color={theme.text} />
+                  <Picker.Item label="Drink" value="Drink" color={theme.text} />
+                  <Picker.Item label="Snack" value="Snack" color={theme.text} />
+                </Picker>
+              </View>
+
+              <TextInput placeholder="Calories" placeholderTextColor={theme.textMuted} value={calories} onChangeText={setCalories} keyboardType="decimal-pad" style={styles.input} />
+              <TextInput placeholder="Protein (g)" placeholderTextColor={theme.textMuted} value={protein} onChangeText={setProtein} keyboardType="decimal-pad" style={styles.input} />
+              <TextInput placeholder="Carbs (g)" placeholderTextColor={theme.textMuted} value={carbs} onChangeText={setCarbs} keyboardType="decimal-pad" style={styles.input} />
+              <TextInput placeholder="Fats (g)" placeholderTextColor={theme.textMuted} value={fats} onChangeText={setFats} keyboardType="decimal-pad" style={styles.input} />
+
+              <View style={styles.modalActions}>
+                <Pressable style={[styles.actionButton, styles.cancelButton]} onPress={() => { Keyboard.dismiss(); setQuickAddFormVisible(false); }}>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </Pressable>
+                <Pressable style={[styles.actionButton, styles.saveButton]} onPress={handleSaveQuickAdd}>
+                  <Text style={styles.saveButtonText}>Save Template</Text>
+                </Pressable>
+              </View>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
     </View>
@@ -1248,22 +1442,26 @@ export default function AnalyticsScreen() {
   const [mode, setMode] = useState<AnalyticsMode>('daily');
   const [series, setSeries] = useState<AnalyticsPoint[]>([]);
   const [heatmapData, setHeatmapData] = useState<HeatmapCell[]>([]);
+  const [allTimeSummary, setAllTimeSummary] = useState<AllTimeSummary | null>(null);
 
   const loadAnalytics = useCallback(async () => {
     if (!profileId) {
       setSeries([]);
       setHeatmapData([]);
+      setAllTimeSummary(null);
       return;
     }
 
     try {
-      const [data, heatmap] = await Promise.all([
+      const [data, heatmap, allTime] = await Promise.all([
         getAnalyticsSeries(profileId, mode),
         getHeatmapData(profileId, 370),
+        getAllTimeSummary(profileId),
       ]);
 
       setSeries(data);
       setHeatmapData(heatmap);
+      setAllTimeSummary(allTime);
     } catch (error) {
       console.error('Failed to load analytics:', error);
     }
@@ -1275,41 +1473,46 @@ export default function AnalyticsScreen() {
     }, [loadAnalytics])
   );
 
-  const totals = useMemo(() => {
-    return series.reduce(
-      (acc, item) => {
-        acc.caloriesIn += item.caloriesIn;
-        acc.caloriesOut += item.caloriesOut;
-        acc.netCalories += item.netCalories;
-        acc.workouts += item.workouts;
+  // calculate averages based on all time summary data
+  const { avgIn, avgOut, avgNet, avgWeight, periodLabel } = useMemo(() => {
+    if (!allTimeSummary) {
+      return { avgIn: 0, avgOut: 0, avgNet: 0, avgWeight: null, periodLabel: 'Daily' };
+    }
 
-        if (item.avgWeight !== null) {
-          acc.weightValues.push(item.avgWeight);
-        }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-        return acc;
-      },
-      {
-        caloriesIn: 0,
-        caloriesOut: 0,
-        netCalories: 0,
-        workouts: 0,
-        weightValues: [] as number[],
-      }
-    );
-  }, [series]);
+    let daysElapsed = 1;
+    if (allTimeSummary.firstLogDate) {
+      const firstDate = new Date(allTimeSummary.firstLogDate);
+      firstDate.setHours(0, 0, 0, 0);
+      const diffTime = Math.abs(today.getTime() - firstDate.getTime());
+      daysElapsed = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    }
 
-  const averageWeight =
-    totals.weightValues.length > 0
-      ? totals.weightValues.reduce((sum, value) => sum + value, 0) /
-        totals.weightValues.length
-      : null;
+    let scale = daysElapsed;
+    let label = 'Daily';
 
-  // calculate averages based on the number of data points
-  const count = series.length > 0 ? series.length : 1;
-  const avgCaloriesIn = totals.caloriesIn / count;
-  const avgCaloriesOut = totals.caloriesOut / count;
-  const avgNetCalories = totals.netCalories / count;
+    if (mode === 'weekly') {
+      scale = daysElapsed / 7;
+      label = 'Weekly';
+    } else if (mode === 'monthly') {
+      scale = daysElapsed / 30.4;
+      label = 'Monthly';
+    }
+
+    const inScaled = allTimeSummary.totalCaloriesIn / scale;
+    const outScaled = allTimeSummary.totalCaloriesOut / scale;
+    const netScaled = inScaled - outScaled;
+
+    return {
+      avgIn: inScaled,
+      avgOut: outScaled,
+      avgNet: netScaled,
+      avgWeight: allTimeSummary.avgWeight,
+      periodLabel: label,
+    };
+  }, [allTimeSummary, mode]);
 
   const caloriesInRolling = calculateRollingAverage(
     series.map((item) => item.caloriesIn),
@@ -1320,11 +1523,6 @@ export default function AnalyticsScreen() {
     series.map((item) => item.avgWeight),
     7
   );
-
-  const netCaloriesLine = series.map((item) => ({
-    label: item.label,
-    value: Math.round(item.netCalories),
-  }));
 
   const caloriesInLine = series.map((item) => ({
     label: item.label,
@@ -1394,24 +1592,24 @@ export default function AnalyticsScreen() {
 
       <View style={styles.summaryGrid}>
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>Avg Calories In</Text>
-          <Text style={styles.summaryValue}>{avgCaloriesIn.toFixed(0)}</Text>
+          <Text style={styles.summaryLabel}>Avg {periodLabel} In</Text>
+          <Text style={styles.summaryValue}>{avgIn.toFixed(0)}</Text>
         </View>
 
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>Avg Calories Out</Text>
-          <Text style={styles.summaryValue}>{avgCaloriesOut.toFixed(0)}</Text>
+          <Text style={styles.summaryLabel}>Avg {periodLabel} Out</Text>
+          <Text style={styles.summaryValue}>{avgOut.toFixed(0)}</Text>
         </View>
 
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>Avg Net</Text>
-          <Text style={styles.summaryValue}>{avgNetCalories.toFixed(0)}</Text>
+          <Text style={styles.summaryLabel}>Avg {periodLabel} Net</Text>
+          <Text style={styles.summaryValue}>{avgNet.toFixed(0)}</Text>
         </View>
 
         <View style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>Avg Weight</Text>
           <Text style={styles.summaryValue}>
-            {averageWeight !== null ? averageWeight.toFixed(1) : '--'}
+            {avgWeight !== null ? avgWeight.toFixed(1) : '--'}
           </Text>
         </View>
       </View>
@@ -1436,15 +1634,6 @@ export default function AnalyticsScreen() {
         targetValue={calorieTarget}
         targetLabel="Target"
         targetColor={theme.danger}
-        theme={theme}
-        styles={styles}
-      />
-
-      <MultiLineChart
-        title="Net Calories Trend"
-        primary={netCaloriesLine}
-        primaryColor={theme.text}
-        primaryLabel="Net Calories"
         theme={theme}
         styles={styles}
       />
@@ -1732,8 +1921,14 @@ const getStyles = (theme: typeof Colors.light) => StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginBottom: 16,
+  },
+  actionRowCard: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
   },
   actionAddButton: {
     backgroundColor: theme.text,
@@ -1755,6 +1950,28 @@ const getStyles = (theme: typeof Colors.light) => StyleSheet.create({
     color: theme.danger,
     fontWeight: '700',
     fontSize: 13,
+  },
+  editButton: {
+    backgroundColor: theme.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 100,
+  },
+  editButtonText: {
+    color: theme.text,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  deleteButton: {
+    backgroundColor: theme.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 100,
+  },
+  deleteButtonText: {
+    color: theme.danger,
+    fontWeight: '700',
+    fontSize: 14,
   },
   modalOverlay: {
     flex: 1,
@@ -1873,5 +2090,113 @@ const getStyles = (theme: typeof Colors.light) => StyleSheet.create({
     color: theme.background,
     fontWeight: '700',
     fontSize: 16,
+  },
+  quickAddContainer: {
+    flex: 1,
+    backgroundColor: theme.background,
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+  },
+  quickAddHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.surface,
+  },
+  quickAddTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -1,
+    color: theme.text,
+  },
+  closeButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  closeButtonText: {
+    color: theme.textMuted,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  quickAddScroll: {
+    flex: 1,
+  },
+  quickAddScrollContent: {
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+    paddingBottom: 60,
+  },
+  createTemplateButton: {
+    backgroundColor: theme.surface,
+    paddingVertical: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+    marginBottom: 32,
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderStyle: 'dashed',
+  },
+  createTemplateButtonText: {
+    color: theme.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  quickAddGroup: {
+    marginBottom: 32,
+  },
+  quickAddGroupTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: theme.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 16,
+  },
+  quickAddCard: {
+    backgroundColor: theme.surface,
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 12,
+  },
+  quickAddCardRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  quickAddCardContent: {
+    flex: 1,
+    paddingRight: 16,
+  },
+  quickAddCardTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: theme.text,
+    marginBottom: 6,
+  },
+  quickAddCardMacros: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.textMuted,
+  },
+  quickAddPlusButton: {
+    backgroundColor: theme.text,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: theme.text,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  quickAddPlusText: {
+    color: theme.background,
+    fontSize: 24,
+    fontWeight: '400',
+    lineHeight: 28,
   },
 });
