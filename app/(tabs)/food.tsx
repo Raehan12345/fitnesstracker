@@ -33,6 +33,8 @@ export default function FoodScreen() {
 
   const [modalVisible, setModalVisible] = useState(false);
 
+  // form states
+  const [editingFoodId, setEditingFoodId] = useState<number | null>(null);
   const [foodName, setFoodName] = useState('');
   const [mealType, setMealType] = useState('');
   const [calories, setCalories] = useState('');
@@ -54,12 +56,24 @@ export default function FoodScreen() {
   }, [entries]);
 
   function resetForm() {
+    setEditingFoodId(null);
     setFoodName('');
     setMealType('');
     setCalories('');
     setProtein('');
     setCarbs('');
     setFats('');
+  }
+
+  function handleEdit(item: FoodEntry) {
+    setEditingFoodId(item.id);
+    setFoodName(item.food_name);
+    setMealType(item.meal_type);
+    setCalories(String(item.calories));
+    setProtein(String(item.protein));
+    setCarbs(String(item.carbs));
+    setFats(String(item.fats));
+    setModalVisible(true);
   }
 
   async function handleSave() {
@@ -90,6 +104,11 @@ export default function FoodScreen() {
       return;
     }
 
+    // delete the old entry if we are editing an existing one
+    if (editingFoodId) {
+      await deleteFoodAndRefresh(editingFoodId);
+    }
+
     await addFoodAndRefresh({
       profileId: profile.id,
       entryDate: today,
@@ -106,12 +125,12 @@ export default function FoodScreen() {
     setModalVisible(false);
   }
 
-function handleDelete(entryId: number) {
+  function handleDelete(entryId: number) {
     if (Platform.OS === 'web') {
       const confirmed = window.confirm('Are you sure you want to delete this entry?');
       if (confirmed) {
         deleteFoodAndRefresh(entryId).catch((error) => {
-          console.error('Failed to delete food entry:', error);
+          console.error('failed to delete food entry:', error);
           window.alert('Could not delete food entry.');
         });
       }
@@ -128,7 +147,7 @@ function handleDelete(entryId: number) {
           style: 'destructive',
           onPress: () => {
             deleteFoodAndRefresh(entryId).catch((error) => {
-              console.error('Failed to delete food entry:', error);
+              console.error('failed to delete food entry:', error);
               Alert.alert('Error', 'Could not delete food entry.');
             });
           },
@@ -136,7 +155,7 @@ function handleDelete(entryId: number) {
       ]
     );
   }
-  
+
   function renderFoodItem({ item }: { item: FoodEntry }) {
     return (
       <View style={styles.entryCard}>
@@ -146,9 +165,14 @@ function handleDelete(entryId: number) {
           {item.calories} kcal | P {item.protein} | C {item.carbs} | F {item.fats}
         </Text>
 
-        <Pressable style={styles.deleteButton} onPress={() => handleDelete(item.id)}>
-          <Text style={styles.deleteButtonText}>Delete</Text>
-        </Pressable>
+        <View style={styles.actionRow}>
+          <Pressable style={styles.editButton} onPress={() => handleEdit(item)}>
+            <Text style={styles.editButtonText}>Edit</Text>
+          </Pressable>
+          <Pressable style={styles.deleteButton} onPress={() => handleDelete(item.id)}>
+            <Text style={styles.deleteButtonText}>Delete</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
@@ -199,7 +223,9 @@ function handleDelete(entryId: number) {
                   behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                   style={styles.modalCard}
                 >
-                  <Text style={styles.modalTitle}>Add Food Entry</Text>
+                  <Text style={styles.modalTitle}>
+                    {editingFoodId ? 'Edit Food Entry' : 'Add Food Entry'}
+                  </Text>
 
                   <TextInput
                     placeholder="Food name"
@@ -278,7 +304,7 @@ function handleDelete(entryId: number) {
                       style={[styles.actionButton, styles.saveButton]}
                       onPress={() => {
                         handleSave().catch((error) => {
-                          console.error('Failed to save food entry:', error);
+                          console.error('failed to save food entry:', error);
                           Alert.alert('Error', 'Could not save food entry.');
                         });
                       }}
@@ -394,9 +420,23 @@ const getStyles = (theme: typeof Colors.light) => StyleSheet.create({
     fontWeight: '700',
     color: theme.text,
   },
-  deleteButton: {
+  actionRow: {
+    flexDirection: 'row',
+    gap: 12,
     marginTop: 16,
-    alignSelf: 'flex-start',
+  },
+  editButton: {
+    backgroundColor: theme.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 100,
+  },
+  editButtonText: {
+    color: theme.text,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  deleteButton: {
     backgroundColor: theme.surface,
     paddingHorizontal: 16,
     paddingVertical: 10,

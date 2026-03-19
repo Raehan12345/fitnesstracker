@@ -12,7 +12,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableWithoutFeedback,
   View,
   useColorScheme,
 } from 'react-native';
@@ -80,6 +79,8 @@ export default function WorkoutScreen() {
 
   const [modalVisible, setModalVisible] = useState(false);
 
+  // form states
+  const [editingWorkoutId, setEditingWorkoutId] = useState<number | null>(null);
   const [workoutName, setWorkoutName] = useState('');
   const [workoutType, setWorkoutType] = useState('');
   const [durationMinutes, setDurationMinutes] = useState('');
@@ -117,6 +118,7 @@ export default function WorkoutScreen() {
     const totalMinutes = (timerSeconds / 60).toFixed(2);
     
     // auto populate the duration and open modal
+    setEditingWorkoutId(null);
     setDurationMinutes(String(totalMinutes));
     setTimerSeconds(0);
     setModalVisible(true);
@@ -136,6 +138,7 @@ export default function WorkoutScreen() {
   }, [isTimerRunning]);
 
   function resetForm() {
+    setEditingWorkoutId(null);
     setWorkoutName('');
     setWorkoutType('');
     setDurationMinutes('');
@@ -145,6 +148,20 @@ export default function WorkoutScreen() {
     setWeightKg('');
     setReps('');
     setDistanceKm('');
+  }
+
+  function handleEdit(item: WorkoutSession) {
+    setEditingWorkoutId(item.id);
+    setWorkoutName(item.name);
+    setWorkoutType(item.workout_type || '');
+    setDurationMinutes(item.duration_minutes ? String(item.duration_minutes) : '');
+    setIntensity(item.intensity || '');
+    setNotes(item.notes || '');
+    setExerciseName(item.exercise_name || '');
+    setWeightKg(item.weight_kg ? String(item.weight_kg) : '');
+    setReps(item.reps ? String(item.reps) : '');
+    setDistanceKm(item.distance_km ? String(item.distance_km) : '');
+    setModalVisible(true);
   }
 
   const estimatedCalories = useMemo(() => {
@@ -187,6 +204,11 @@ export default function WorkoutScreen() {
     if (Number.isNaN(parsedDuration) || parsedDuration <= 0) {
       Alert.alert('Invalid duration', 'Please enter a valid duration in minutes.');
       return;
+    }
+
+    // delete old entry if we are editing
+    if (editingWorkoutId) {
+      await deleteWorkoutAndRefresh(editingWorkoutId);
     }
 
     if (workoutType === 'Strength Training') {
@@ -264,12 +286,12 @@ export default function WorkoutScreen() {
     setModalVisible(false);
   }
 
-function handleDelete(sessionId: number) {
+  function handleDelete(sessionId: number) {
     if (Platform.OS === 'web') {
       const confirmed = window.confirm('Are you sure you want to delete this workout session?');
       if (confirmed) {
         deleteWorkoutAndRefresh(sessionId).catch((error) => {
-          console.error('Failed to delete workout session:', error);
+          console.error('failed to delete workout session:', error);
           window.alert('Could not delete workout session.');
         });
       }
@@ -286,7 +308,7 @@ function handleDelete(sessionId: number) {
           style: 'destructive',
           onPress: () => {
             deleteWorkoutAndRefresh(sessionId).catch((error) => {
-              console.error('Failed to delete workout session:', error);
+              console.error('failed to delete workout session:', error);
               Alert.alert('Error', 'Could not delete workout session.');
             });
           },
@@ -318,7 +340,7 @@ function handleDelete(sessionId: number) {
 
         {item.weight_kg && item.reps ? (
           <Text style={styles.entryDetail}>
-            Best set: {item.weight_kg} kg × {item.reps}
+            Best set: {item.weight_kg} kg x {item.reps}
           </Text>
         ) : null}
 
@@ -334,15 +356,19 @@ function handleDelete(sessionId: number) {
 
         {item.notes ? <Text style={styles.entryNotes}>{item.notes}</Text> : null}
 
-        <Pressable style={styles.deleteButton} onPress={() => handleDelete(item.id)}>
-          <Text style={styles.deleteButtonText}>Delete</Text>
-        </Pressable>
+        <View style={styles.actionRow}>
+          <Pressable style={styles.editButton} onPress={() => handleEdit(item)}>
+            <Text style={styles.editButtonText}>Edit</Text>
+          </Pressable>
+          <Pressable style={styles.deleteButton} onPress={() => handleDelete(item.id)}>
+            <Text style={styles.deleteButtonText}>Delete</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <View style={styles.container}>
         <FlatList
           data={sessions}
@@ -406,7 +432,10 @@ function handleDelete(sessionId: number) {
                 </View>
               </View>
 
-              <Pressable style={styles.addButton} onPress={() => setModalVisible(true)}>
+              <Pressable style={styles.addButton} onPress={() => {
+                resetForm();
+                setModalVisible(true);
+              }}>
                 <Text style={styles.addButtonText}>+ Add Workout Manually</Text>
               </Pressable>
             </>
@@ -417,170 +446,168 @@ function handleDelete(sessionId: number) {
         />
 
         <Modal visible={modalVisible} animationType="slide" transparent>
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-            <View style={styles.modalOverlay}>
-              <TouchableWithoutFeedback>
-                <KeyboardAvoidingView
-                  behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                  style={styles.modalWrapper}
-                >
-                  <View style={styles.modalCard}>
-                    <ScrollView
-                      keyboardShouldPersistTaps="handled"
-                      showsVerticalScrollIndicator={false}
-                    >
-                      <Text style={styles.modalTitle}>Add Workout Session</Text>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.modalOverlay}
+          >
+            {/* Flex 1 backdrop pushes the card to the bottom and catches outside taps */}
+            <Pressable style={{ flex: 1 }} onPress={Keyboard.dismiss} />
 
-                      <TextInput
-                        placeholder="Workout name"
-                        placeholderTextColor={theme.textMuted}
-                        value={workoutName}
-                        onChangeText={setWorkoutName}
-                        style={styles.input}
-                      />
+            <View style={styles.modalCard}>
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                    <Text style={styles.modalTitle}>
+                      {editingWorkoutId ? 'Edit Workout Session' : 'Add Workout Session'}
+                    </Text>
 
+                    <TextInput
+                      placeholder="Workout name"
+                      placeholderTextColor={theme.textMuted}
+                      value={workoutName}
+                      onChangeText={setWorkoutName}
+                      style={styles.input}
+                    />
+
+                    <View style={styles.pickerContainer}>
+                      <Picker
+                        selectedValue={workoutType}
+                        onValueChange={(itemValue) => {
+                          setWorkoutType(itemValue);
+                          // clear intensity when type changes to prevent mismatch
+                          setIntensity('');
+                        }}
+                        style={styles.picker}
+                        itemStyle={styles.pickerItem}
+                      >
+                        <Picker.Item label="Select workout type..." value="" color={theme.textMuted} />
+                        <Picker.Item label="Walking" value="Walking" color={theme.text} />
+                        <Picker.Item label="Running" value="Running" color={theme.text} />
+                        <Picker.Item label="Cycling" value="Cycling" color={theme.text} />
+                        <Picker.Item label="Strength Training" value="Strength Training" color={theme.text} />
+                        <Picker.Item label="HIIT" value="HIIT" color={theme.text} />
+                        <Picker.Item label="Sports" value="Sports" color={theme.text} />
+                        <Picker.Item label="Other" value="Other" color={theme.text} />
+                      </Picker>
+                    </View>
+
+                    <TextInput
+                      placeholder="Duration (minutes)"
+                      placeholderTextColor={theme.textMuted}
+                      value={durationMinutes}
+                      onChangeText={setDurationMinutes}
+                      keyboardType="decimal-pad"
+                      style={styles.input}
+                    />
+
+                    {workoutType !== '' ? (
                       <View style={styles.pickerContainer}>
                         <Picker
-                          selectedValue={workoutType}
-                          onValueChange={(itemValue) => {
-                            setWorkoutType(itemValue);
-                            // clear intensity when type changes to prevent mismatch
-                            setIntensity('');
-                          }}
+                          selectedValue={intensity}
+                          onValueChange={(itemValue) => setIntensity(itemValue)}
                           style={styles.picker}
                           itemStyle={styles.pickerItem}
                         >
-                          <Picker.Item label="Select workout type..." value="" color={theme.textMuted} />
-                          <Picker.Item label="Walking" value="Walking" color={theme.text} />
-                          <Picker.Item label="Running" value="Running" color={theme.text} />
-                          <Picker.Item label="Cycling" value="Cycling" color={theme.text} />
-                          <Picker.Item label="Strength Training" value="Strength Training" color={theme.text} />
-                          <Picker.Item label="HIIT" value="HIIT" color={theme.text} />
-                          <Picker.Item label="Sports" value="Sports" color={theme.text} />
-                          <Picker.Item label="Other" value="Other" color={theme.text} />
+                          <Picker.Item label="Select specification..." value="" color={theme.textMuted} />
+                          {getIntensityOptions(workoutType).map((option) => (
+                            <Picker.Item key={option} label={option} value={option} color={theme.text} />
+                          ))}
                         </Picker>
                       </View>
+                    ) : null}
 
-                      <TextInput
-                        placeholder="Duration (minutes)"
-                        placeholderTextColor={theme.textMuted}
-                        value={durationMinutes}
-                        onChangeText={setDurationMinutes}
-                        keyboardType="decimal-pad"
-                        style={styles.input}
-                      />
-
-                      {workoutType !== '' ? (
-                        <View style={styles.pickerContainer}>
-                          <Picker
-                            selectedValue={intensity}
-                            onValueChange={(itemValue) => setIntensity(itemValue)}
-                            style={styles.picker}
-                            itemStyle={styles.pickerItem}
-                          >
-                            <Picker.Item label="Select specification..." value="" color={theme.textMuted} />
-                            {getIntensityOptions(workoutType).map((option) => (
-                              <Picker.Item key={option} label={option} value={option} color={theme.text} />
-                            ))}
-                          </Picker>
-                        </View>
-                      ) : null}
-
-                      {workoutType === 'Strength Training' ? (
-                        <>
-                          <TextInput
-                            placeholder="Exercise name"
-                            placeholderTextColor={theme.textMuted}
-                            value={exerciseName}
-                            onChangeText={setExerciseName}
-                            style={styles.input}
-                          />
-
-                          <TextInput
-                            placeholder="Weight lifted (kg)"
-                            placeholderTextColor={theme.textMuted}
-                            value={weightKg}
-                            onChangeText={setWeightKg}
-                            keyboardType="decimal-pad"
-                            style={styles.input}
-                          />
-
-                          <TextInput
-                            placeholder="Reps"
-                            placeholderTextColor={theme.textMuted}
-                            value={reps}
-                            onChangeText={setReps}
-                            keyboardType="numeric"
-                            style={styles.input}
-                          />
-                        </>
-                      ) : null}
-
-                      {workoutType === 'Running' ? (
+                    {workoutType === 'Strength Training' ? (
+                      <>
                         <TextInput
-                          placeholder="Distance (km)"
+                          placeholder="Exercise name"
                           placeholderTextColor={theme.textMuted}
-                          value={distanceKm}
-                          onChangeText={setDistanceKm}
+                          value={exerciseName}
+                          onChangeText={setExerciseName}
+                          style={styles.input}
+                        />
+
+                        <TextInput
+                          placeholder="Weight lifted (kg)"
+                          placeholderTextColor={theme.textMuted}
+                          value={weightKg}
+                          onChangeText={setWeightKg}
                           keyboardType="decimal-pad"
                           style={styles.input}
                         />
-                      ) : null}
 
-                      <View style={styles.calorieCard}>
-                        <Text style={styles.calorieCardLabel}>Estimated calories burned</Text>
-                        <Text style={styles.calorieCardValue}>
-                          {estimatedCalories > 0 ? `${estimatedCalories.toFixed(0)} kcal` : 'N/A'}
-                        </Text>
-                        <Text style={styles.calorieCardHint}>
-                          {latestWeight !== null
-                            ? `Using latest body weight: ${latestWeight.toFixed(1)} kg`
-                            : 'Add a body-weight entry in Progress to enable calorie estimates'}
-                        </Text>
-                      </View>
+                        <TextInput
+                          placeholder="Reps"
+                          placeholderTextColor={theme.textMuted}
+                          value={reps}
+                          onChangeText={setReps}
+                          keyboardType="numeric"
+                          style={styles.input}
+                        />
+                      </>
+                    ) : null}
 
+                    {workoutType === 'Running' ? (
                       <TextInput
-                        placeholder="Notes (optional)"
+                        placeholder="Distance (km)"
                         placeholderTextColor={theme.textMuted}
-                        value={notes}
-                        onChangeText={setNotes}
-                        style={[styles.input, styles.notesInput]}
-                        multiline
+                        value={distanceKm}
+                        onChangeText={setDistanceKm}
+                        keyboardType="decimal-pad"
+                        style={styles.input}
                       />
+                    ) : null}
 
-                      <View style={styles.modalActions}>
-                        <Pressable
-                          style={[styles.actionButton, styles.cancelButton]}
-                          onPress={() => {
-                            Keyboard.dismiss();
-                            resetForm();
-                            setModalVisible(false);
-                          }}
-                        >
-                          <Text style={styles.cancelButtonText}>Cancel</Text>
-                        </Pressable>
+                    <View style={styles.calorieCard}>
+                      <Text style={styles.calorieCardLabel}>Estimated calories burned</Text>
+                      <Text style={styles.calorieCardValue}>
+                        {estimatedCalories > 0 ? `${estimatedCalories.toFixed(0)} kcal` : 'N/A'}
+                      </Text>
+                      <Text style={styles.calorieCardHint}>
+                        {latestWeight !== null
+                          ? `Using latest body weight: ${latestWeight.toFixed(1)} kg`
+                          : 'Add a body weight entry in Progress to enable calorie estimates'}
+                      </Text>
+                    </View>
 
-                        <Pressable
-                          style={[styles.actionButton, styles.saveButton]}
-                          onPress={() => {
-                            handleSave().catch((error) => {
-                              console.error('Failed to save workout session:', error);
-                              Alert.alert('Error', 'Could not save workout session.');
-                            });
-                          }}
-                        >
-                          <Text style={styles.saveButtonText}>Save</Text>
-                        </Pressable>
-                      </View>
-                    </ScrollView>
-                  </View>
-                </KeyboardAvoidingView>
-              </TouchableWithoutFeedback>
-            </View>
-          </TouchableWithoutFeedback>
+                    <TextInput
+                      placeholder="Notes (optional)"
+                      placeholderTextColor={theme.textMuted}
+                      value={notes}
+                      onChangeText={setNotes}
+                      style={[styles.input, styles.notesInput]}
+                      multiline
+                    />
+
+                    <View style={styles.modalActions}>
+                      <Pressable
+                        style={[styles.actionButton, styles.cancelButton]}
+                        onPress={() => {
+                          Keyboard.dismiss();
+                          resetForm();
+                          setModalVisible(false);
+                        }}
+                      >
+                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                      </Pressable>
+
+                      <Pressable
+                        style={[styles.actionButton, styles.saveButton]}
+                        onPress={() => {
+                          handleSave().catch((error) => {
+                            console.error('failed to save workout session:', error);
+                            Alert.alert('Error', 'Could not save workout session.');
+                          });
+                        }}
+                      >
+                        <Text style={styles.saveButtonText}>Save</Text>
+                      </Pressable>
+                    </View>
+                  </ScrollView>
+                </View>
+              </KeyboardAvoidingView>
         </Modal>
       </View>
-    </TouchableWithoutFeedback>
   );
 }
 
@@ -753,9 +780,23 @@ const getStyles = (theme: typeof Colors.light) => StyleSheet.create({
     marginTop: 6,
     fontStyle: 'italic',
   },
-  deleteButton: {
+  actionRow: {
+    flexDirection: 'row',
+    gap: 12,
     marginTop: 16,
-    alignSelf: 'flex-start',
+  },
+  editButton: {
+    backgroundColor: theme.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 100,
+  },
+  editButtonText: {
+    color: theme.text,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  deleteButton: {
     backgroundColor: theme.surface,
     paddingHorizontal: 16,
     paddingVertical: 10,

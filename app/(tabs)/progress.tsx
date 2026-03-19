@@ -79,7 +79,7 @@ function ProgressHeader({
           <View style={styles.pbCard} key={pb.exerciseName}>
             <Text style={styles.pbTitle}>{pb.exerciseName}</Text>
             <Text style={styles.pbValue}>
-              {pb.weightKg} kg × {pb.reps}
+              {pb.weightKg} kg x {pb.reps}
             </Text>
             <Text style={styles.pbDate}>{pb.sessionDate}</Text>
           </View>
@@ -141,12 +141,23 @@ export default function ProgressScreen() {
   const deleteBodyMetricAndRefresh = useAppStore((state) => state.deleteBodyMetricAndRefresh);
 
   const [modalVisible, setModalVisible] = useState(false);
+  
+  // form states
+  const [editingWeightId, setEditingWeightId] = useState<number | null>(null);
   const [bodyWeight, setBodyWeight] = useState('');
   const [entryDate, setEntryDate] = useState(today);
 
   function resetForm() {
+    setEditingWeightId(null);
     setBodyWeight('');
     setEntryDate(today);
+  }
+
+  function handleEdit(item: (typeof bodyMetrics)[number]) {
+    setEditingWeightId(item.id);
+    setBodyWeight(String(item.body_weight));
+    setEntryDate(item.entry_date);
+    setModalVisible(true);
   }
 
   async function handleSave() {
@@ -164,6 +175,11 @@ export default function ProgressScreen() {
       return;
     }
 
+    // delete old entry if we are editing
+    if (editingWeightId) {
+      await deleteBodyMetricAndRefresh(editingWeightId);
+    }
+
     await addBodyMetricAndRefresh({
       profileId: profile.id,
       entryDate: entryDate.trim(),
@@ -175,12 +191,12 @@ export default function ProgressScreen() {
     setModalVisible(false);
   }
 
-function handleDelete(metricId: number) {
+  function handleDelete(metricId: number) {
     if (Platform.OS === 'web') {
       const confirmed = window.confirm('Are you sure you want to delete this weight entry?');
       if (confirmed) {
         deleteBodyMetricAndRefresh(metricId).catch((error) => {
-          console.error('Failed to delete weight entry:', error);
+          console.error('failed to delete weight entry:', error);
           window.alert('Could not delete weight entry.');
         });
       }
@@ -197,7 +213,7 @@ function handleDelete(metricId: number) {
           style: 'destructive',
           onPress: () => {
             deleteBodyMetricAndRefresh(metricId).catch((error) => {
-              console.error('Failed to delete weight entry:', error);
+              console.error('failed to delete weight entry:', error);
               Alert.alert('Error', 'Could not delete weight entry.');
             });
           },
@@ -214,9 +230,14 @@ function handleDelete(metricId: number) {
         <Text style={styles.entryTitle}>{item.body_weight.toFixed(1)} kg</Text>
         <Text style={styles.entryDate}>{item.entry_date}</Text>
 
-        <Pressable style={styles.deleteButton} onPress={() => handleDelete(item.id)}>
-          <Text style={styles.deleteButtonText}>Delete</Text>
-        </Pressable>
+        <View style={styles.actionRow}>
+          <Pressable style={styles.editButton} onPress={() => handleEdit(item)}>
+            <Text style={styles.editButtonText}>Edit</Text>
+          </Pressable>
+          <Pressable style={styles.deleteButton} onPress={() => handleDelete(item.id)}>
+            <Text style={styles.deleteButtonText}>Delete</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
@@ -241,7 +262,10 @@ function handleDelete(metricId: number) {
               metricsCount={metricsCount}
               strengthPbs={strengthPbs}
               runPbs={runPbs}
-              onAddWeight={() => setModalVisible(true)}
+              onAddWeight={() => {
+                resetForm();
+                setModalVisible(true);
+              }}
               styles={styles}
             />
           }
@@ -256,7 +280,9 @@ function handleDelete(metricId: number) {
                   behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                   style={styles.modalCard}
                 >
-                  <Text style={styles.modalTitle}>Add Weight Entry</Text>
+                  <Text style={styles.modalTitle}>
+                    {editingWeightId ? 'Edit Weight Entry' : 'Add Weight Entry'}
+                  </Text>
 
                   <TextInput
                     placeholder="Body weight (kg)"
@@ -291,7 +317,7 @@ function handleDelete(metricId: number) {
                       style={[styles.actionButton, styles.saveButton]}
                       onPress={() => {
                         handleSave().catch((error) => {
-                          console.error('Failed to save weight entry:', error);
+                          console.error('failed to save weight entry:', error);
                           Alert.alert('Error', 'Could not save weight entry.');
                         });
                       }}
@@ -438,9 +464,23 @@ const getStyles = (theme: typeof Colors.light) => StyleSheet.create({
     color: theme.textMuted,
     fontWeight: '500',
   },
-  deleteButton: {
+  actionRow: {
+    flexDirection: 'row',
+    gap: 12,
     marginTop: 16,
-    alignSelf: 'flex-start',
+  },
+  editButton: {
+    backgroundColor: theme.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 100,
+  },
+  editButtonText: {
+    color: theme.text,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  deleteButton: {
     backgroundColor: theme.surface,
     paddingHorizontal: 16,
     paddingVertical: 10,

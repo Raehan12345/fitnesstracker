@@ -1,11 +1,19 @@
+import { Picker } from '@react-native-picker/picker';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useMemo, useState } from 'react';
 import {
+  Alert,
   Dimensions,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
+  TouchableWithoutFeedback,
   View,
   useColorScheme,
 } from 'react-native';
@@ -13,7 +21,6 @@ import Svg, {
   Circle,
   Line,
   Polyline,
-  Rect,
   Text as SvgText,
 } from 'react-native-svg';
 import { Colors } from '../../constants/theme';
@@ -24,7 +31,9 @@ import {
   DayBreakdown,
   getAnalyticsSeries,
   getDayBreakdown,
+  getFoodEntriesByDate,
   getHeatmapData,
+  getWorkoutSessionsByDate,
   HeatmapCell,
 } from '../../src/db/database';
 import { useAppStore } from '../../src/store/useAppStore';
@@ -38,161 +47,48 @@ type ChartPoint = {
   value: number;
 };
 
-type DualBarPoint = {
-  label: string;
-  leftValue: number;
-  rightValue: number;
-};
-
+// helper to format numbers
 function formatNumber(value: number) {
   if (Number.isInteger(value)) return String(value);
   return value.toFixed(1);
 }
 
-function DualBarChart({
-  title,
-  data,
-  leftLabel,
-  rightLabel,
-  leftColor,
-  rightColor,
-  theme,
-  styles,
-}: {
-  title: string;
-  data: DualBarPoint[];
-  leftLabel: string;
-  rightLabel: string;
-  leftColor: string;
-  rightColor: string;
-  theme: typeof Colors.light;
-  styles: any;
-}) {
-  if (data.length === 0) {
-    return (
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>{title}</Text>
-        <Text style={styles.emptyText}>No data available.</Text>
-      </View>
-    );
-  }
+// helper to get met values for workouts
+function getMetValue(workoutType: string, intensity: string) {
+  const metMap: Record<string, Record<string, number>> = {
+    Walking: { 'Stroll (< 4 km/h)': 2.5, 'Brisk (4-5.5 km/h)': 3.5, 'Power Walk (> 5.5 km/h)': 4.5 },
+    Running: { 'Jog (> 6:00/km)': 7.0, 'Paced (5:00-6:00/km)': 9.0, 'Fast (< 5:00/km)': 11.0 },
+    Cycling: { 'Casual (< 16 km/h)': 4.0, 'Moderate (16-20 km/h)': 6.0, 'Vigorous (> 20 km/h)': 8.0 },
+    'Strength Training': { 'Powerlifting (Long Rests)': 3.5, 'Hypertrophy (Standard)': 5.0, 'Circuit (Short Rests)': 6.5 },
+    HIIT: { 'Work:Rest 1:2': 6.0, 'Work:Rest 1:1': 8.0, 'Work:Rest 2:1 (Tabata)': 10.0 },
+    Sports: { 'Recreational (Lots of stops)': 5.0, 'Competitive (Continuous)': 8.0 },
+    Other: { 'Low Exertion': 3.0, 'Moderate Exertion': 5.0, 'High Exertion': 7.0 },
+  };
 
-  const allValues = data.flatMap((item) => [item.leftValue, item.rightValue]);
-  const max = Math.max(...allValues, 1);
-
-  const paddingLeft = 36;
-  const paddingRight = 12;
-  const paddingTop = 18;
-  const paddingBottom = 30;
-
-  const innerWidth = CHART_WIDTH - paddingLeft - paddingRight;
-  const innerHeight = CHART_HEIGHT - paddingTop - paddingBottom;
-
-  const slotWidth = innerWidth / data.length;
-  const barWidth = Math.min(12, slotWidth * 0.22);
-  const gap = 4;
-
-  const yGuides = 4;
-  const guideValues = Array.from({ length: yGuides + 1 }, (_, i) => {
-    const value = max - (i / yGuides) * max;
-    const y = paddingTop + (i / yGuides) * innerHeight;
-    return { value, y };
-  });
-
-  return (
-    <View style={styles.card}>
-      <Text style={styles.cardTitle}>{title}</Text>
-
-      <View style={styles.legendRow}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendSwatch, { backgroundColor: leftColor }]} />
-          <Text style={styles.legendText}>{leftLabel}</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendSwatch, { backgroundColor: rightColor }]} />
-          <Text style={styles.legendText}>{rightLabel}</Text>
-        </View>
-      </View>
-
-      <Svg width={CHART_WIDTH} height={CHART_HEIGHT}>
-        {guideValues.map((guide, index) => (
-          <SvgText key={`guide-text-${index}`} />
-        ))}
-
-        {guideValues.map((guide, index) => (
-          <Line
-            key={`guide-line-${index}`}
-            x1={paddingLeft}
-            y1={guide.y}
-            x2={CHART_WIDTH - paddingRight}
-            y2={guide.y}
-            stroke={theme.border}
-            strokeWidth="1"
-          />
-        ))}
-
-        {guideValues.map((guide, index) => (
-          <SvgText
-            key={`guide-label-${index}`}
-            x={paddingLeft - 6}
-            y={guide.y + 4}
-            fontSize="10"
-            fill={theme.textMuted}
-            textAnchor="end"
-            fontWeight="500"
-          >
-            {formatNumber(guide.value)}
-          </SvgText>
-        ))}
-
-        {data.map((item, index) => {
-          const centerX = paddingLeft + index * slotWidth + slotWidth / 2;
-
-          const leftHeight = (item.leftValue / max) * innerHeight;
-          const rightHeight = (item.rightValue / max) * innerHeight;
-
-          const leftX = centerX - barWidth - gap / 2;
-          const rightX = centerX + gap / 2;
-
-          const leftY = paddingTop + innerHeight - leftHeight;
-          const rightY = paddingTop + innerHeight - rightHeight;
-
-          return (
-            <View key={item.label}>
-              <Rect
-                x={leftX}
-                y={leftY}
-                width={barWidth}
-                height={leftHeight}
-                rx={barWidth / 2}
-                fill={leftColor}
-              />
-              <Rect
-                x={rightX}
-                y={rightY}
-                width={barWidth}
-                height={rightHeight}
-                rx={barWidth / 2}
-                fill={rightColor}
-              />
-              <SvgText
-                x={centerX}
-                y={CHART_HEIGHT - 8}
-                fontSize="10"
-                fill={theme.textMuted}
-                textAnchor="middle"
-                fontWeight="500"
-              >
-                {item.label}
-              </SvgText>
-            </View>
-          );
-        })}
-      </Svg>
-    </View>
-  );
+  return metMap[workoutType]?.[intensity] ?? 0;
 }
 
+// helper to get intensity options for workouts
+function getIntensityOptions(workoutType: string) {
+  switch (workoutType) {
+    case 'Walking':
+      return ['Stroll (< 4 km/h)', 'Brisk (4-5.5 km/h)', 'Power Walk (> 5.5 km/h)'];
+    case 'Running':
+      return ['Jog (> 6:00/km)', 'Paced (5:00-6:00/km)', 'Fast (< 5:00/km)'];
+    case 'Cycling':
+      return ['Casual (< 16 km/h)', 'Moderate (16-20 km/h)', 'Vigorous (> 20 km/h)'];
+    case 'Strength Training':
+      return ['Powerlifting (Long Rests)', 'Hypertrophy (Standard)', 'Circuit (Short Rests)'];
+    case 'HIIT':
+      return ['Work:Rest 1:2', 'Work:Rest 1:1', 'Work:Rest 2:1 (Tabata)'];
+    case 'Sports':
+      return ['Recreational (Lots of stops)', 'Competitive (Continuous)'];
+    default:
+      return ['Low Exertion', 'Moderate Exertion', 'High Exertion'];
+  }
+}
+
+// multi line chart component
 function MultiLineChart({
   title,
   primary,
@@ -442,22 +338,65 @@ function MultiLineChart({
   );
 }
 
+// heatmap component
 function Heatmap({
   data,
   title,
   profileId,
   theme,
   styles,
+  onDataChanged,
 }: {
   data: HeatmapCell[];
   title: string;
   profileId: number | undefined;
   theme: typeof Colors.light;
   styles: any;
+  onDataChanged: () => void;
 }) {
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [selectedCell, setSelectedCell] = useState<HeatmapCell | null>(null);
   const [selectedBreakdown, setSelectedBreakdown] = useState<DayBreakdown | null>(null);
+
+  // zustand connections for modals
+  const addFoodAndRefresh = useAppStore((state) => state.addFoodAndRefresh);
+  const deleteFoodAndRefresh = useAppStore((state) => state.deleteFoodAndRefresh);
+  const addWorkoutAndRefresh = useAppStore((state) => state.addWorkoutAndRefresh);
+  const deleteWorkoutAndRefresh = useAppStore((state) => state.deleteWorkoutAndRefresh);
+  const addBodyMetricAndRefresh = useAppStore((state) => state.addBodyMetricAndRefresh);
+  const deleteBodyMetricAndRefresh = useAppStore((state) => state.deleteBodyMetricAndRefresh);
+  const bodyMetrics = useAppStore((state) => state.bodyMetrics);
+  const latestWeight = useAppStore((state) => state.latestWeight);
+
+  // modal visibility states
+  const [foodModalVisible, setFoodModalVisible] = useState(false);
+  const [workoutModalVisible, setWorkoutModalVisible] = useState(false);
+  const [weightModalVisible, setWeightModalVisible] = useState(false);
+
+  // food form states
+  const [foodName, setFoodName] = useState('');
+  const [mealType, setMealType] = useState('');
+  const [calories, setCalories] = useState('');
+  const [protein, setProtein] = useState('');
+  const [carbs, setCarbs] = useState('');
+  const [fats, setFats] = useState('');
+  const [editingFoodId, setEditingFoodId] = useState<number | null>(null);
+
+  // workout form states
+  const [workoutName, setWorkoutName] = useState('');
+  const [workoutType, setWorkoutType] = useState('');
+  const [durationMinutes, setDurationMinutes] = useState('');
+  const [intensity, setIntensity] = useState('');
+  const [notes, setNotes] = useState('');
+  const [exerciseName, setExerciseName] = useState('');
+  const [weightKg, setWeightKg] = useState('');
+  const [reps, setReps] = useState('');
+  const [distanceKm, setDistanceKm] = useState('');
+  const [editingWorkoutId, setEditingWorkoutId] = useState<number | null>(null);
+
+  // weight form states
+  const [bodyWeight, setBodyWeight] = useState('');
+  const [editingWeightId, setEditingWeightId] = useState<number | null>(null);
 
   const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -580,22 +519,348 @@ function Heatmap({
     }
   }
 
+  async function refreshSelectedDay(dateKey: string) {
+    if (!profileId) return;
+    try {
+      const breakdown = await getDayBreakdown(profileId, dateKey);
+      setSelectedBreakdown(breakdown);
+    } catch (error) {
+      console.error('failed to load day breakdown:', error);
+      setSelectedBreakdown(null);
+    }
+  }
+
   async function handleSelectDate(cell: HeatmapCell) {
     setSelectedCell(cell);
+    await refreshSelectedDay(cell.date);
+  }
 
-    if (!profileId) {
-      setSelectedBreakdown(null);
+  // modal openers
+
+  const openFoodModal = () => {
+    setEditingFoodId(null);
+    setFoodName('');
+    setMealType('');
+    setCalories('');
+    setProtein('');
+    setCarbs('');
+    setFats('');
+    setFoodModalVisible(true);
+  };
+
+  const openWorkoutModal = () => {
+    setEditingWorkoutId(null);
+    setWorkoutName('');
+    setWorkoutType('');
+    setDurationMinutes('');
+    setIntensity('');
+    setNotes('');
+    setExerciseName('');
+    setWeightKg('');
+    setReps('');
+    setDistanceKm('');
+    setWorkoutModalVisible(true);
+  };
+
+  const openWeightModal = () => {
+    setEditingWeightId(null);
+    setBodyWeight('');
+    setWeightModalVisible(true);
+  };
+
+  const handleEditFood = async (foodId: number) => {
+    if (!profileId || !selectedCell) return;
+    const foods = await getFoodEntriesByDate(profileId, selectedCell.date);
+    const fullFood = foods.find((f) => f.id === foodId);
+    if (fullFood) {
+      setEditingFoodId(fullFood.id);
+      setFoodName(fullFood.food_name);
+      setMealType(fullFood.meal_type);
+      setCalories(String(fullFood.calories));
+      setProtein(String(fullFood.protein));
+      setCarbs(String(fullFood.carbs));
+      setFats(String(fullFood.fats));
+      setFoodModalVisible(true);
+    }
+  };
+
+  const handleEditWorkout = async (workoutId: number) => {
+    if (!profileId || !selectedCell) return;
+    const sessions = await getWorkoutSessionsByDate(profileId, selectedCell.date);
+    const fullWorkout = sessions.find((s) => s.id === workoutId);
+    if (fullWorkout) {
+      setEditingWorkoutId(fullWorkout.id);
+      setWorkoutName(fullWorkout.name);
+      setWorkoutType(fullWorkout.workout_type || '');
+      setDurationMinutes(fullWorkout.duration_minutes ? String(fullWorkout.duration_minutes) : '');
+      setIntensity(fullWorkout.intensity || '');
+      setNotes(fullWorkout.notes || '');
+      setExerciseName(fullWorkout.exercise_name || '');
+      setWeightKg(fullWorkout.weight_kg ? String(fullWorkout.weight_kg) : '');
+      setReps(fullWorkout.reps ? String(fullWorkout.reps) : '');
+      setDistanceKm(fullWorkout.distance_km ? String(fullWorkout.distance_km) : '');
+      setWorkoutModalVisible(true);
+    }
+  };
+
+  const handleEditWeight = (metricId: number, currentWeight: number) => {
+    setEditingWeightId(metricId);
+    setBodyWeight(String(currentWeight));
+    setWeightModalVisible(true);
+  };
+
+  // delete functions
+
+  const handleDeleteFood = async (id: number) => {
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm('Are you sure you want to delete this food entry?');
+      if (confirmed) {
+        try {
+          await deleteFoodAndRefresh(id);
+          if (selectedCell) await refreshSelectedDay(selectedCell.date);
+          onDataChanged();
+        } catch (error) {
+          console.error('failed to delete food entry:', error);
+          window.alert('Could not delete food entry.');
+        }
+      }
+      return;
+    }
+    Alert.alert('Delete food entry', 'Are you sure you want to delete this entry?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteFoodAndRefresh(id);
+            if (selectedCell) await refreshSelectedDay(selectedCell.date);
+            onDataChanged();
+          } catch (error) {
+            console.error('failed to delete food entry:', error);
+            Alert.alert('Error', 'Could not delete food entry.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleDeleteWorkout = async (id: number) => {
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm('Are you sure you want to delete this workout session?');
+      if (confirmed) {
+        try {
+          await deleteWorkoutAndRefresh(id);
+          if (selectedCell) await refreshSelectedDay(selectedCell.date);
+          onDataChanged();
+        } catch (error) {
+          console.error('failed to delete workout session:', error);
+          window.alert('Could not delete workout session.');
+        }
+      }
+      return;
+    }
+    Alert.alert('Delete workout session', 'Are you sure you want to delete this workout session?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteWorkoutAndRefresh(id);
+            if (selectedCell) await refreshSelectedDay(selectedCell.date);
+            onDataChanged();
+          } catch (error) {
+            console.error('failed to delete workout session:', error);
+            Alert.alert('Error', 'Could not delete workout session.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleDeleteWeight = async (id: number) => {
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm('Are you sure you want to delete this weight entry?');
+      if (confirmed) {
+        try {
+          await deleteBodyMetricAndRefresh(id);
+          if (selectedCell) await refreshSelectedDay(selectedCell.date);
+          onDataChanged();
+        } catch (error) {
+          console.error('failed to delete weight entry:', error);
+          window.alert('Could not delete weight entry.');
+        }
+      }
+      return;
+    }
+    Alert.alert('Delete weight entry', 'Are you sure you want to delete this weight entry?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteBodyMetricAndRefresh(id);
+            if (selectedCell) await refreshSelectedDay(selectedCell.date);
+            onDataChanged();
+          } catch (error) {
+            console.error('failed to delete weight entry:', error);
+            Alert.alert('Error', 'Could not delete weight entry.');
+          }
+        },
+      },
+    ]);
+  };
+
+  // save functions
+
+  const handleSaveFood = async () => {
+    if (!profileId || !selectedCell) return;
+    if (!foodName.trim()) { Alert.alert('Missing food name', 'Please enter a food name.'); return; }
+    if (!mealType) { Alert.alert('Missing meal type', 'Please select a meal type.'); return; }
+
+    const parsedCalories = Number(calories);
+    const parsedProtein = Number(protein);
+    const parsedCarbs = Number(carbs);
+    const parsedFats = Number(fats);
+
+    if (Number.isNaN(parsedCalories) || Number.isNaN(parsedProtein) || Number.isNaN(parsedCarbs) || Number.isNaN(parsedFats)) {
+      Alert.alert('Invalid input', 'Please enter valid numbers for all macros.');
       return;
     }
 
     try {
-      const breakdown = await getDayBreakdown(profileId, cell.date);
-      setSelectedBreakdown(breakdown);
+      if (editingFoodId) await deleteFoodAndRefresh(editingFoodId);
+      await addFoodAndRefresh({
+        profileId,
+        entryDate: selectedCell.date,
+        mealType,
+        foodName: foodName.trim(),
+        calories: parsedCalories,
+        protein: parsedProtein,
+        carbs: parsedCarbs,
+        fats: parsedFats,
+      });
+      Keyboard.dismiss();
+      setFoodModalVisible(false);
+      await refreshSelectedDay(selectedCell.date);
+      onDataChanged();
     } catch (error) {
-      console.error('Failed to load day breakdown:', error);
-      setSelectedBreakdown(null);
+      console.error('failed to save food entry:', error);
+      Alert.alert('Error', 'Could not save food entry.');
     }
-  }
+  };
+
+  const estimatedCaloriesWorkout = useMemo(() => {
+    const parsedDuration = Number(durationMinutes);
+    if (!workoutType || !intensity || latestWeight === null || Number.isNaN(parsedDuration) || parsedDuration <= 0) return 0;
+    const met = getMetValue(workoutType, intensity);
+    return met * latestWeight * (parsedDuration / 60);
+  }, [workoutType, intensity, durationMinutes, latestWeight]);
+
+  const handleSaveWorkout = async () => {
+    if (!profileId || !selectedCell) return;
+    if (!workoutName.trim()) { Alert.alert('Missing workout name', 'Please enter a workout name.'); return; }
+    if (!workoutType) { Alert.alert('Missing workout type', 'Please select a workout type.'); return; }
+    if (!intensity) { Alert.alert('Missing intensity', 'Please select an intensity.'); return; }
+
+    const parsedDuration = Number(durationMinutes);
+    if (Number.isNaN(parsedDuration) || parsedDuration <= 0) {
+      Alert.alert('Invalid duration', 'Please enter a valid duration in minutes.');
+      return;
+    }
+
+    try {
+      if (editingWorkoutId) await deleteWorkoutAndRefresh(editingWorkoutId);
+
+      if (workoutType === 'Strength Training') {
+        const parsedWeightKg = Number(weightKg);
+        const parsedReps = Number(reps);
+        if (!exerciseName.trim()) { Alert.alert('Missing exercise', 'Please enter an exercise name.'); return; }
+        if (Number.isNaN(parsedWeightKg) || parsedWeightKg <= 0) { Alert.alert('Invalid weight', 'Please enter a valid lifted weight in kg.'); return; }
+        if (Number.isNaN(parsedReps) || parsedReps <= 0) { Alert.alert('Invalid reps', 'Please enter a valid rep count.'); return; }
+
+        await addWorkoutAndRefresh({
+          kind: 'strength',
+          profileId,
+          sessionDate: selectedCell.date,
+          name: workoutName.trim(),
+          notes: notes.trim(),
+          workoutType,
+          durationMinutes: parsedDuration,
+          intensity,
+          bodyWeightKg: latestWeight,
+          estimatedCalories: estimatedCaloriesWorkout,
+          exerciseName: exerciseName.trim(),
+          weightKg: parsedWeightKg,
+          reps: parsedReps,
+        });
+      } else if (workoutType === 'Running') {
+        const parsedDistanceKm = Number(distanceKm);
+        if (Number.isNaN(parsedDistanceKm) || parsedDistanceKm <= 0) { Alert.alert('Invalid distance', 'Please enter a valid running distance in km.'); return; }
+
+        await addWorkoutAndRefresh({
+          kind: 'run',
+          profileId,
+          sessionDate: selectedCell.date,
+          name: workoutName.trim(),
+          notes: notes.trim(),
+          workoutType,
+          durationMinutes: parsedDuration,
+          intensity,
+          bodyWeightKg: latestWeight,
+          estimatedCalories: estimatedCaloriesWorkout,
+          distanceKm: parsedDistanceKm,
+        });
+      } else {
+        await addWorkoutAndRefresh({
+          kind: 'general',
+          profileId,
+          sessionDate: selectedCell.date,
+          name: workoutName.trim(),
+          notes: notes.trim(),
+          workoutType,
+          durationMinutes: parsedDuration,
+          intensity,
+          bodyWeightKg: latestWeight,
+          estimatedCalories: estimatedCaloriesWorkout,
+        });
+      }
+      Keyboard.dismiss();
+      setWorkoutModalVisible(false);
+      await refreshSelectedDay(selectedCell.date);
+      onDataChanged();
+    } catch (error) {
+      console.error('failed to save workout session:', error);
+      Alert.alert('Error', 'Could not save workout session.');
+    }
+  };
+
+  const handleSaveWeight = async () => {
+    if (!profileId || !selectedCell) return;
+    const parsedWeight = Number(bodyWeight);
+    if (Number.isNaN(parsedWeight) || parsedWeight <= 0) {
+      Alert.alert('Invalid body weight', 'Please enter a valid body weight in kg.');
+      return;
+    }
+
+    try {
+      if (editingWeightId) await deleteBodyMetricAndRefresh(editingWeightId);
+      await addBodyMetricAndRefresh({
+        profileId,
+        entryDate: selectedCell.date,
+        bodyWeight: parsedWeight,
+      });
+      Keyboard.dismiss();
+      setWeightModalVisible(false);
+      await refreshSelectedDay(selectedCell.date);
+      onDataChanged();
+    } catch (error) {
+      console.error('failed to save weight entry:', error);
+      Alert.alert('Error', 'Could not save weight entry.');
+    }
+  };
 
   if (!activeMonth) {
     return (
@@ -607,6 +872,7 @@ function Heatmap({
   }
 
   const rows = buildCalendarCells(activeMonth);
+  const dayMetric = bodyMetrics.find((m) => m.entry_date === selectedCell?.date);
 
   return (
     <View style={styles.card}>
@@ -735,41 +1001,72 @@ function Heatmap({
 
       {selectedCell && selectedBreakdown ? (
         <View style={styles.selectedDayCard}>
-          <Text style={styles.selectedDayTitle}>
-            {formatReadableDate(selectedCell.date)}
-          </Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+            <Text style={[styles.selectedDayTitle, { marginBottom: 0 }]}>
+              {formatReadableDate(selectedCell.date)}
+            </Text>
+          </View>
 
-          <Text style={styles.selectedDayText}>
-            Food entries: {selectedBreakdown.foodEntryCount}
-          </Text>
-          <Text style={styles.selectedDayText}>
-            Workouts: {selectedBreakdown.workoutCount}
-          </Text>
-          <Text style={styles.selectedDayText}>
-            Body weight logged:{' '}
-            {selectedBreakdown.hasBodyWeightEntry
-              ? `${selectedBreakdown.bodyWeight?.toFixed(1)} kg`
-              : 'No'}
-          </Text>
+          <View style={styles.actionRow}>
+            <Pressable style={styles.actionAddButton} onPress={openWeightModal}><Text style={styles.actionAddButtonText}>+ Weight</Text></Pressable>
+            <Pressable style={styles.actionAddButton} onPress={openFoodModal}><Text style={styles.actionAddButtonText}>+ Food</Text></Pressable>
+            <Pressable style={styles.actionAddButton} onPress={openWorkoutModal}><Text style={styles.actionAddButtonText}>+ Workout</Text></Pressable>
+          </View>
+
           <Text style={styles.selectedDayText}>
             Calories in: {selectedBreakdown.totalCaloriesIn.toFixed(0)} kcal
           </Text>
           <Text style={styles.selectedDayText}>
             Calories out: {selectedBreakdown.totalCaloriesOut.toFixed(0)} kcal
           </Text>
+          <Text style={styles.selectedDayText}>
+            Food entries: {selectedBreakdown.foodEntryCount}
+          </Text>
+          <Text style={styles.selectedDayText}>
+            Workouts: {selectedBreakdown.workoutCount}
+          </Text>
+
+          <View style={[styles.detailRow, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }]}>
+            <Text style={[styles.selectedDayText, { marginBottom: 0 }]}>
+              Body weight logged:{' '}
+              {selectedBreakdown.hasBodyWeightEntry
+                ? `${selectedBreakdown.bodyWeight?.toFixed(1)} kg`
+                : 'No'}
+            </Text>
+            {dayMetric && (
+              <View style={{ flexDirection: 'row', gap: 16 }}>
+                <Pressable onPress={() => handleEditWeight(dayMetric.id, dayMetric.body_weight)}>
+                  <Text style={styles.editActionText}>Edit</Text>
+                </Pressable>
+                <Pressable onPress={() => handleDeleteWeight(dayMetric.id)}>
+                  <Text style={styles.deleteActionText}>Delete</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
 
           {selectedBreakdown.foods.length > 0 ? (
             <View style={styles.detailSection}>
               <Text style={styles.detailSectionTitle}>Foods</Text>
               {selectedBreakdown.foods.map((food) => (
-                <View key={food.id} style={styles.detailRow}>
-                  <Text style={styles.detailMainText}>
-                    {food.mealType} • {food.name}
-                  </Text>
-                  <Text style={styles.detailSubText}>
-                    {food.calories.toFixed(0)} kcal | P {food.protein.toFixed(1)} | C{' '}
-                    {food.carbs.toFixed(1)} | F {food.fats.toFixed(1)}
-                  </Text>
+                <View key={food.id} style={[styles.detailRow, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={styles.detailMainText}>
+                      {food.mealType} • {food.name}
+                    </Text>
+                    <Text style={styles.detailSubText}>
+                      {food.calories.toFixed(0)} kcal | P {food.protein.toFixed(1)} | C{' '}
+                      {food.carbs.toFixed(1)} | F {food.fats.toFixed(1)}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 16 }}>
+                    <Pressable onPress={() => handleEditFood(food.id)}>
+                      <Text style={styles.editActionText}>Edit</Text>
+                    </Pressable>
+                    <Pressable onPress={() => handleDeleteFood(food.id)}>
+                      <Text style={styles.deleteActionText}>Delete</Text>
+                    </Pressable>
+                  </View>
                 </View>
               ))}
             </View>
@@ -779,17 +1076,27 @@ function Heatmap({
             <View style={styles.detailSection}>
               <Text style={styles.detailSectionTitle}>Workouts</Text>
               {selectedBreakdown.workouts.map((workout) => (
-                <View key={workout.id} style={styles.detailRow}>
-                  <Text style={styles.detailMainText}>
-                    {workout.name}
-                    {workout.workoutType ? ` • ${workout.workoutType}` : ''}
-                  </Text>
-                  <Text style={styles.detailSubText}>
-                    {workout.durationMinutes !== null
-                      ? `${workout.durationMinutes} min`
-                      : 'Duration --'}{' '}
-                    | {workout.estimatedCalories.toFixed(0)} kcal burned
-                  </Text>
+                <View key={workout.id} style={[styles.detailRow, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={styles.detailMainText}>
+                      {workout.name}
+                      {workout.workoutType ? ` • ${workout.workoutType}` : ''}
+                    </Text>
+                    <Text style={styles.detailSubText}>
+                      {workout.durationMinutes !== null
+                        ? `${workout.durationMinutes} min`
+                        : 'Duration -'}{' '}
+                      | {workout.estimatedCalories.toFixed(0)} kcal burned
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 16 }}>
+                    <Pressable onPress={() => handleEditWorkout(workout.id)}>
+                      <Text style={styles.editActionText}>Edit</Text>
+                    </Pressable>
+                    <Pressable onPress={() => handleDeleteWorkout(workout.id)}>
+                      <Text style={styles.deleteActionText}>Delete</Text>
+                    </Pressable>
+                  </View>
                 </View>
               ))}
             </View>
@@ -798,6 +1105,134 @@ function Heatmap({
       ) : (
         <Text style={styles.cardSubtext}>Tap a day to view details.</Text>
       )}
+
+      {/* food modal */}
+      <Modal visible={foodModalVisible} animationType="slide" transparent>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback>
+              <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalCard}>
+                <Text style={styles.modalTitle}>{editingFoodId ? 'Edit Food Entry' : 'Add Food Entry'}</Text>
+                <TextInput placeholder="Food name" placeholderTextColor={theme.textMuted} value={foodName} onChangeText={setFoodName} style={styles.input} />
+                <View style={styles.pickerContainer}>
+                  <Picker selectedValue={mealType} onValueChange={(itemValue) => setMealType(itemValue)} style={styles.picker} itemStyle={styles.pickerItem}>
+                    <Picker.Item label="Select meal type..." value="" color={theme.textMuted} />
+                    <Picker.Item label="Breakfast" value="Breakfast" color={theme.text} />
+                    <Picker.Item label="Lunch" value="Lunch" color={theme.text} />
+                    <Picker.Item label="Dinner" value="Dinner" color={theme.text} />
+                    <Picker.Item label="Supper" value="Supper" color={theme.text} />
+                    <Picker.Item label="Drink" value="Drink" color={theme.text} />
+                    <Picker.Item label="Snack" value="Snack" color={theme.text} />
+                  </Picker>
+                </View>
+                <TextInput placeholder="Calories" placeholderTextColor={theme.textMuted} value={calories} onChangeText={setCalories} keyboardType="decimal-pad" style={styles.input} />
+                <TextInput placeholder="Protein (g)" placeholderTextColor={theme.textMuted} value={protein} onChangeText={setProtein} keyboardType="decimal-pad" style={styles.input} />
+                <TextInput placeholder="Carbs (g)" placeholderTextColor={theme.textMuted} value={carbs} onChangeText={setCarbs} keyboardType="decimal-pad" style={styles.input} />
+                <TextInput placeholder="Fats (g)" placeholderTextColor={theme.textMuted} value={fats} onChangeText={setFats} keyboardType="decimal-pad" style={styles.input} />
+                <View style={styles.modalActions}>
+                  <Pressable style={[styles.actionButton, styles.cancelButton]} onPress={() => { Keyboard.dismiss(); setFoodModalVisible(false); }}>
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable style={[styles.actionButton, styles.saveButton]} onPress={handleSaveFood}>
+                    <Text style={styles.saveButtonText}>Save</Text>
+                  </Pressable>
+                </View>
+              </KeyboardAvoidingView>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* workout modal */}
+      <Modal visible={workoutModalVisible} animationType="slide" transparent>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.modalOverlay}
+          >
+            {/* Flex 1 backdrop pushes the card to the bottom and catches outside taps */}
+            <Pressable style={{ flex: 1 }} onPress={Keyboard.dismiss} />
+
+            <View style={styles.modalCard}>
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                    <Text style={styles.modalTitle}>{editingWorkoutId ? 'Edit Workout Session' : 'Add Workout Session'}</Text>
+                    <TextInput placeholder="Workout name" placeholderTextColor={theme.textMuted} value={workoutName} onChangeText={setWorkoutName} style={styles.input} />
+                    <View style={styles.pickerContainer}>
+                      <Picker selectedValue={workoutType} onValueChange={(itemValue) => { setWorkoutType(itemValue); setIntensity(''); }} style={styles.picker} itemStyle={styles.pickerItem}>
+                        <Picker.Item label="Select workout type..." value="" color={theme.textMuted} />
+                        <Picker.Item label="Walking" value="Walking" color={theme.text} />
+                        <Picker.Item label="Running" value="Running" color={theme.text} />
+                        <Picker.Item label="Cycling" value="Cycling" color={theme.text} />
+                        <Picker.Item label="Strength Training" value="Strength Training" color={theme.text} />
+                        <Picker.Item label="HIIT" value="HIIT" color={theme.text} />
+                        <Picker.Item label="Sports" value="Sports" color={theme.text} />
+                        <Picker.Item label="Other" value="Other" color={theme.text} />
+                      </Picker>
+                    </View>
+                    <TextInput placeholder="Duration (minutes)" placeholderTextColor={theme.textMuted} value={durationMinutes} onChangeText={setDurationMinutes} keyboardType="decimal-pad" style={styles.input} />
+                    {workoutType !== '' ? (
+                      <View style={styles.pickerContainer}>
+                        <Picker selectedValue={intensity} onValueChange={(itemValue) => setIntensity(itemValue)} style={styles.picker} itemStyle={styles.pickerItem}>
+                          <Picker.Item label="Select specification..." value="" color={theme.textMuted} />
+                          {getIntensityOptions(workoutType).map((option) => (
+                            <Picker.Item key={option} label={option} value={option} color={theme.text} />
+                          ))}
+                        </Picker>
+                      </View>
+                    ) : null}
+                    {workoutType === 'Strength Training' ? (
+                      <>
+                        <TextInput placeholder="Exercise name" placeholderTextColor={theme.textMuted} value={exerciseName} onChangeText={setExerciseName} style={styles.input} />
+                        <TextInput placeholder="Weight lifted (kg)" placeholderTextColor={theme.textMuted} value={weightKg} onChangeText={setWeightKg} keyboardType="decimal-pad" style={styles.input} />
+                        <TextInput placeholder="Reps" placeholderTextColor={theme.textMuted} value={reps} onChangeText={setReps} keyboardType="numeric" style={styles.input} />
+                      </>
+                    ) : null}
+                    {workoutType === 'Running' ? (
+                      <TextInput placeholder="Distance (km)" placeholderTextColor={theme.textMuted} value={distanceKm} onChangeText={setDistanceKm} keyboardType="decimal-pad" style={styles.input} />
+                    ) : null}
+                    <View style={styles.calorieCard}>
+                      <Text style={styles.calorieCardLabel}>Estimated calories burned</Text>
+                      <Text style={styles.calorieCardValue}>{estimatedCaloriesWorkout > 0 ? `${estimatedCaloriesWorkout.toFixed(0)} kcal` : 'N/A'}</Text>
+                      <Text style={styles.calorieCardHint}>{latestWeight !== null ? `Using latest body weight: ${latestWeight.toFixed(1)} kg` : 'Add a body-weight entry to enable calorie estimates'}</Text>
+                    </View>
+                    <TextInput placeholder="Notes (optional)" placeholderTextColor={theme.textMuted} value={notes} onChangeText={setNotes} style={[styles.input, styles.notesInput]} multiline />
+                    <View style={styles.modalActions}>
+                      <Pressable style={[styles.actionButton, styles.cancelButton]} onPress={() => { Keyboard.dismiss(); setWorkoutModalVisible(false); }}>
+                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                      </Pressable>
+                      <Pressable style={[styles.actionButton, styles.saveButton]} onPress={handleSaveWorkout}>
+                        <Text style={styles.saveButtonText}>Save</Text>
+                      </Pressable>
+                    </View>
+                  </ScrollView>
+                </View>
+              </KeyboardAvoidingView>
+      </Modal>
+
+      {/* weight modal */}
+      <Modal visible={weightModalVisible} animationType="slide" transparent>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback>
+              <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalCard}>
+                <Text style={styles.modalTitle}>{editingWeightId ? 'Edit Weight Entry' : 'Add Weight Entry'}</Text>
+                <TextInput placeholder="Body weight (kg)" placeholderTextColor={theme.textMuted} value={bodyWeight} onChangeText={setBodyWeight} keyboardType="decimal-pad" style={styles.input} />
+                <View style={styles.modalActions}>
+                  <Pressable style={[styles.actionButton, styles.cancelButton]} onPress={() => { Keyboard.dismiss(); setWeightModalVisible(false); }}>
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable style={[styles.actionButton, styles.saveButton]} onPress={handleSaveWeight}>
+                    <Text style={styles.saveButtonText}>Save</Text>
+                  </Pressable>
+                </View>
+              </KeyboardAvoidingView>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
     </View>
   );
 }
@@ -870,11 +1305,11 @@ export default function AnalyticsScreen() {
         totals.weightValues.length
       : null;
 
-  const caloriesCompareChart = series.map((item) => ({
-    label: item.label,
-    leftValue: Math.round(item.caloriesIn),
-    rightValue: Math.round(item.caloriesOut),
-  }));
+  // calculate averages based on the number of data points
+  const count = series.length > 0 ? series.length : 1;
+  const avgCaloriesIn = totals.caloriesIn / count;
+  const avgCaloriesOut = totals.caloriesOut / count;
+  const avgNetCalories = totals.netCalories / count;
 
   const caloriesInRolling = calculateRollingAverage(
     series.map((item) => item.caloriesIn),
@@ -959,18 +1394,18 @@ export default function AnalyticsScreen() {
 
       <View style={styles.summaryGrid}>
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>Calories In</Text>
-          <Text style={styles.summaryValue}>{totals.caloriesIn.toFixed(0)}</Text>
+          <Text style={styles.summaryLabel}>Avg Calories In</Text>
+          <Text style={styles.summaryValue}>{avgCaloriesIn.toFixed(0)}</Text>
         </View>
 
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>Calories Out</Text>
-          <Text style={styles.summaryValue}>{totals.caloriesOut.toFixed(0)}</Text>
+          <Text style={styles.summaryLabel}>Avg Calories Out</Text>
+          <Text style={styles.summaryValue}>{avgCaloriesOut.toFixed(0)}</Text>
         </View>
 
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>Net Calories</Text>
-          <Text style={styles.summaryValue}>{totals.netCalories.toFixed(0)}</Text>
+          <Text style={styles.summaryLabel}>Avg Net</Text>
+          <Text style={styles.summaryValue}>{avgNetCalories.toFixed(0)}</Text>
         </View>
 
         <View style={styles.summaryCard}>
@@ -987,17 +1422,7 @@ export default function AnalyticsScreen() {
         profileId={profileId}
         theme={theme}
         styles={styles}
-      />
-
-      <DualBarChart
-        title="Calories In vs Calories Out"
-        data={caloriesCompareChart}
-        leftLabel="Calories In"
-        rightLabel="Calories Out"
-        leftColor={theme.text}
-        rightColor={theme.textMuted}
-        theme={theme}
-        styles={styles}
+        onDataChanged={loadAnalytics}
       />
 
       <MultiLineChart
@@ -1304,5 +1729,149 @@ const getStyles = (theme: typeof Colors.light) => StyleSheet.create({
     color: theme.textMuted,
     fontWeight: '500',
     marginTop: 4,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  actionAddButton: {
+    backgroundColor: theme.text,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 100,
+  },
+  actionAddButtonText: {
+    color: theme.background,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  editActionText: {
+    color: theme.text,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  deleteActionText: {
+    color: theme.danger,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalWrapper: {
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: theme.background,
+    padding: 24,
+    paddingTop: 32,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    maxHeight: '90%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    marginBottom: 24,
+    color: theme.text,
+  },
+  input: {
+    borderWidth: 0,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginBottom: 16,
+    fontSize: 16,
+    color: theme.text,
+    backgroundColor: theme.surface,
+    fontWeight: '500',
+  },
+  pickerContainer: {
+    borderWidth: 0,
+    borderRadius: 16,
+    marginBottom: 16,
+    overflow: 'hidden',
+    backgroundColor: theme.surface,
+  },
+  picker: {
+    color: theme.text,
+    backgroundColor: 'transparent',
+  },
+  pickerItem: {
+    color: theme.text,
+    backgroundColor: theme.surface,
+  },
+  calorieCard: {
+    backgroundColor: theme.text,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  calorieCardLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    color: theme.background,
+    marginBottom: 8,
+    opacity: 0.8,
+  },
+  calorieCardValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -1,
+    color: theme.background,
+  },
+  calorieCardHint: {
+    marginTop: 8,
+    fontSize: 12,
+    color: theme.background,
+    opacity: 0.6,
+    textAlign: 'center',
+  },
+  notesInput: {
+    minHeight: 120,
+    textAlignVertical: 'top',
+    paddingTop: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  actionButton: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 100,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: theme.border,
+  },
+  cancelButtonText: {
+    color: theme.text,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  saveButton: {
+    backgroundColor: theme.text,
+  },
+  saveButtonText: {
+    color: theme.background,
+    fontWeight: '700',
+    fontSize: 16,
   },
 });
